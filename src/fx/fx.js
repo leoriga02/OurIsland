@@ -65,7 +65,7 @@ export class Fx {
   }
 
   _spawn(list, o) {
-    for (const p of list) if (p.life <= 0) { Object.assign(p, o); return p; }
+    for (const p of list) if (p.life <= 0) { p.firefly = false; Object.assign(p, o); return p; }
     return null;
   }
 
@@ -91,6 +91,11 @@ export class Fx {
     for (let i = 0; i < n; i++) {
       this._spawn(this.gparts, { life: 0.9, max: 0.9, x: at.x + (Math.random() - 0.5) * 0.8, y: at.y + Math.random() * 0.6, z: at.z + (Math.random() - 0.5) * 0.8, vx: 0, vy: 0.5 + Math.random() * 0.6, vz: 0, grav: 0, size: 0.07 + Math.random() * 0.04, r: c.r, g: c.g, b: c.b });
     }
+  }
+
+  firefly(at) {
+    const p = this._spawn(this.gparts, { life: 3.5, max: 3.5, x: at.x, y: at.y, z: at.z, vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.3, vz: (Math.random() - 0.5) * 0.6, grav: 0, size: 0.09, r: 0.75, g: 1, b: 0.35 });
+    if (p) p.firefly = true;
   }
 
   addFire(pos, scale = 1) {
@@ -149,7 +154,8 @@ export class Fx {
         p.vy -= p.grav * dt;
         p.x += p.vx * dt + Math.sin(p.life * 6 + i) * dt * 0.2; p.y += p.vy * dt; p.z += p.vz * dt;
         this.gpos[i * 3] = p.x; this.gpos[i * 3 + 1] = p.y; this.gpos[i * 3 + 2] = p.z;
-        const k = p.life / p.max;
+        let k = p.life / p.max;
+        if (p.firefly) k = Math.sin(k * Math.PI) * (0.6 + 0.4 * Math.sin(p.life * 9 + i));
         this.gcol[i * 3] = p.r * k; this.gcol[i * 3 + 1] = p.g * k; this.gcol[i * 3 + 2] = p.b * k;
         this.gsize[i] = p.size;
       } else this.gsize[i] = 0;

@@ -190,8 +190,10 @@ export class Character {
     if (this.heldItem) this.armR.hand.remove(this.heldItem);
     this.heldItem = obj;
     if (obj) {
-      obj.position.set(0, -0.06, 0.02);
-      obj.rotation.set(Math.PI / 2, 0, 0);
+      // grip the handle near its lower end, head pointing forward and slightly down
+      obj.rotation.set(Math.PI * 0.62, 0, 0);
+      const grip = new THREE.Vector3(0, -0.2 * obj.scale.y, 0).applyEuler(obj.rotation);
+      obj.position.set(0, -0.06, 0.02).sub(grip);
       this.armR.hand.add(obj);
     }
   }

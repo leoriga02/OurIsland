@@ -238,7 +238,36 @@ export class Game {
     this.checkQuest();
   }
 
-  give(id, n, silent) {
+  // little item meshes that hop into the backpack
+  fly(id, from, n = 1) {
+    this.flying ||= [];
+    for (let i = 0; i < Math.min(n, 3); i++) {
+      const m = itemMesh(id);
+      m.castShadow = false;
+      m.position.copy(from).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, Math.random() * 0.3, (Math.random() - 0.5) * 0.6));
+      this.scene.add(m);
+      this.flying.push({ m, from: m.position.clone(), t: -i * 0.08, spin: Math.random() * 6 });
+    }
+  }
+
+  updateFlying(dt) {
+    if (!this.flying) return;
+    const to = this.player.pos.clone().add(new THREE.Vector3(0, 1.3, 0)).addScaledVector(this.player.forward, -0.25);
+    for (let i = this.flying.length - 1; i >= 0; i--) {
+      const f = this.flying[i];
+      f.t += dt;
+      const k = clamp(f.t / 0.45, 0, 1);
+      const e = k * k * (3 - 2 * k);
+      f.m.position.lerpVectors(f.from, to, e);
+      f.m.position.y += Math.sin(k * Math.PI) * 1.0;
+      f.m.rotation.set(f.spin + k * 6, k * 4, 0);
+      f.m.scale.setScalar(1.3 * (1 - k * 0.7));
+      if (k >= 1) { this.scene.remove(f.m); this.flying.splice(i, 1); }
+    }
+  }
+
+  give(id, n, silent, from) {
+    if (from) this.fly(id, from, n);
     const left = this.inv.add(id, n);
     if (n - left > 0) {
       this.progress.col[id] = (this.progress.col[id] || 0) + (n - left);
@@ -325,16 +354,16 @@ export class Game {
         c.play('gather', 0.55, () => {
           if (!o.alive) return;
           if (t.kind === 'pickup') {
-            this.give(o.item, 1);
+            this.give(o.item, 1, false, new THREE.Vector3(o.x, o.y + 0.1, o.z));
             this.nature.remove(o, 180, time);
             this.audio.pickup();
           } else if (t.kind === 'fiber') {
-            this.give('fiber', 2 + (Math.random() < 0.4 ? 1 : 0));
+            this.give('fiber', 2 + (Math.random() < 0.4 ? 1 : 0), false, new THREE.Vector3(o.x, o.y + 0.6, o.z));
             this.nature.remove(o, 160, time);
             this.fx.burst('grass', new THREE.Vector3(o.x, o.y + 0.6, o.z), 10);
             this.audio.rustle();
           } else {
-            this.give('berries', 2 + Math.floor(Math.random() * 2));
+            this.give('berries', 2 + Math.floor(Math.random() * 2), false, new THREE.Vector3(o.x, o.y + 0.9, o.z));
             this.nature.remove(o, 200, time);
             this.fx.burst('berry', new THREE.Vector3(o.x, o.y + 0.9, o.z), 8);
             this.audio.rustle();
@@ -364,11 +393,12 @@ export class Game {
               const fall = new THREE.Vector3(o.x, o.y + 0.3, o.z).addScaledVector(new THREE.Vector3(o.x - P.pos.x, 0, o.z - P.pos.z).normalize(), 3);
               this.fx.burst('leaf', fall.clone().add(new THREE.Vector3(0, 0.5, 0)), 24);
               this.fx.burst('dust', fall, 14);
+              const at = fall.clone().add(new THREE.Vector3(0, 0.4, 0));
               if (o.kind === 'palm') {
-                this.give('wood', 4); this.give('leaf', 3);
-                if (Math.random() < 0.6) this.give('coconut', 1 + (Math.random() < 0.3 ? 1 : 0));
+                this.give('wood', 4, false, at); this.give('leaf', 3, false, at.clone().addScaledVector(fall.clone().sub(new THREE.Vector3(o.x, fall.y, o.z)).normalize(), 2));
+                if (Math.random() < 0.6) this.give('coconut', 1 + (Math.random() < 0.3 ? 1 : 0), false, at);
               } else {
-                this.give('wood', 5); this.give('stick', 2);
+                this.give('wood', 5, false, at); this.give('stick', 2, false, at);
                 if (Math.random() < 0.3) this.give('leaf', 1);
               }
               this.progress.felled++;
@@ -393,9 +423,9 @@ export class Game {
           this.audio.mine();
           this.rig.shake(0.05, 0.15);
           this.nature.shake(o, 0.6, P.pos.x, P.pos.z);
-          this.give('stone', 1);
+          this.give('stone', 1, false, hitAt);
           if (o.hp <= 0) {
-            this.give('stone', 3);
+            this.give('stone', 3, false, hitAt);
             this.fx.burst('dust', new THREE.Vector3(o.x, o.y + 0.4, o.z), 20);
             this.nature.remove(o, 240, time);
           }
@@ -648,6 +678,14 @@ export class Game {
     if (this.started) {
       P.update(dt, intent, this.rig.yaw);
       this.rig.update(dt, P, intent);
+      if (this.intro && this.intro.t < 1) {
+        const I = this.intro;
+        I.t = Math.min(1, I.t + dt / 2.4);
+        const k = I.t < 0.5 ? 4 * I.t ** 3 : 1 - Math.pow(-2 * I.t + 2, 3) / 2;
+        const toQ = this.camera.quaternion.clone();
+        this.camera.position.lerpVectors(I.pos, this.camera.position, k);
+        this.camera.quaternion.slerpQuaternions(I.quat, toQ, k);
+      }
     } else {
       // title-screen orbit
       this.titleYaw = (this.titleYaw ?? 0.6) + dt * 0.05;
@@ -669,6 +707,7 @@ export class Game {
     this.birds.update(dt, this.sky.night);
     this.props.update(dt, this.time);
     this.building.animate(dt);
+    this.updateFlying(dt);
     this.fx.update(dt, this.camera.position, this.sky.night);
     this.fx.setScale(this.renderer.domElement.height / this.renderer.getPixelRatio() * 0.9);
 
@@ -713,6 +752,13 @@ export class Game {
     const nightNow = this.sky.night > 0.5;
     if (nightNow && !this._wasNight) this.ui.toast(null, '🌙 Night falls. Stay near a fire or sleep.');
     this._wasNight = nightNow;
+    // fireflies drifting around at night
+    if (this.sky.night > 0.5 && Math.random() < dt * 6) {
+      const a = Math.random() * Math.PI * 2, d = 3 + Math.random() * 12;
+      const x = P.pos.x + Math.cos(a) * d, z = P.pos.z + Math.sin(a) * d;
+      const h = this.terrain.heightAt(x, z);
+      if (h > 1.5) this.fx.firefly(new THREE.Vector3(x, h + 0.4 + Math.random() * 1.5, z));
+    }
     // hint sparkles on nearby pickups early on
     this.sparkT = (this.sparkT || 0) - dt;
     if (this.questIndex <= 1 && this.sparkT <= 0) {
@@ -769,6 +815,7 @@ export class Game {
 
   start() {
     this.started = true;
+    this.intro = { t: 0, pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() };
     this.audio.unlock();
     this.rig.target.copy(this.player.pos);
     if (!this.loaded) {

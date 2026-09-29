@@ -82,7 +82,11 @@ export class Player {
 
     const g = W.groundHeight(this.pos.x, this.pos.z, this.pos.y);
     if (!this.swimming) {
-      if (this.pos.y <= g + 0.02 && this.vel.y <= 0) {
+      if (this.pos.y < g - 0.35 && g - this.pos.y < 2.0 && this.vel.y <= 0.5) {
+        // hoist up onto a raised floor (foundations on stilts)
+        this.pos.y = Math.min(g, this.pos.y + dt * 7);
+        this.vel.y = 0; this.grounded = true; this.airTime = 0;
+      } else if (this.pos.y <= g + 0.02 && this.vel.y <= 0) {
         if (!this.grounded && this.airTime > 0.35) this.onLand?.(this.vel.y);
         this.pos.y = g; this.vel.y = 0; this.grounded = true; this.airTime = 0;
       } else if (this.grounded && this.pos.y - g < 0.45 && this.vel.y <= 0) {

@@ -40,12 +40,49 @@ export class Audio {
     s2.connect(bp); bp.connect(g2); g2.connect(this.master); s2.start();
     this.nextBird = 2;
     this.nextCricket = 0;
+    // soft music bus with an echo
+    this.musicBus = c.createGain(); this.musicBus.gain.value = 0.055;
+    const delay = c.createDelay(1); delay.delayTime.value = 0.42;
+    const fb = c.createGain(); fb.gain.value = 0.38;
+    const lpf = c.createBiquadFilter(); lpf.type = 'lowpass'; lpf.frequency.value = 2200;
+    this.musicBus.connect(this.master);
+    this.musicBus.connect(delay); delay.connect(lpf); lpf.connect(fb); fb.connect(delay); lpf.connect(this.master);
+    this.nextNote = 3; this.phrase = 0; this.chord = 0;
+  }
+
+  _note(freq, when, vol = 1, dur = 1.6) {
+    const c = this.ctx;
+    for (const [mul, v] of [[1, 1], [2.01, 0.25], [4.0, 0.06]]) {
+      const o = c.createOscillator(); o.type = 'sine';
+      o.frequency.value = freq * mul;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, when);
+      g.gain.exponentialRampToValueAtTime(vol * v, when + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + dur / mul);
+      o.connect(g); g.connect(this.musicBus);
+      o.start(when); o.stop(when + dur + 0.1);
+    }
+  }
+
+  _music(dt, night) {
+    this.nextNote -= dt;
+    if (this.nextNote > 0) return;
+    const scale = night > 0.5 ? [220, 246.9, 293.7, 329.6, 392, 440] : [261.6, 293.7, 329.6, 392, 440, 523.3, 587.3];
+    const t = this.ctx.currentTime + 0.05;
+    this.phrase++;
+    if (this.phrase % 9 === 0) { this.nextNote = 4 + Math.random() * 5; this.chord = (this.chord + 1) % 3; return; }
+    const root = [0, 3, 1][this.chord];
+    const i = Math.min(scale.length - 1, root + Math.floor(Math.random() * 4));
+    this._note(scale[i], t, night > 0.5 ? 0.6 : 0.8);
+    if (Math.random() < 0.3) this._note(scale[Math.max(0, i - 2)] / 2, t, 0.5, 2.4);
+    this.nextNote = [0.45, 0.9, 0.9, 1.35][Math.floor(Math.random() * 4)];
   }
 
   update(dt, { coastDist = 0, night = 0, underCover = false } = {}) {
     if (!this.ctx) return;
     const near = Math.max(0, 1 - Math.max(0, coastDist) / 70);
     this.surf.gain.setTargetAtTime(0.03 + near * 0.11, this.ctx.currentTime, 0.5);
+    this._music(dt, night);
     this.nextBird -= dt;
     if (this.nextBird < 0) {
       this.nextBird = 2 + Math.random() * 6;
