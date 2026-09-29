@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, master, claude/our-island-prototype-bx6m2r]
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:

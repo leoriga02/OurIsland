@@ -308,6 +308,20 @@ export class Character {
         const d = Math.sin(u * Math.PI * 3);
         aR.sh.rotation.x = -1.6 + d * 0.5; aR.el.rotation.x = -0.8;
         this.spine.rotation.x += 0.15;
+      } else if (A.type === 'wake') {
+        // lying on the sand -> sitting up -> standing
+        const lie = 1 - smooth(clamp((u - 0.15) / 0.55, 0, 1));
+        const sit = Math.sin(clamp((u - 0.2) / 0.7, 0, 1) * Math.PI);
+        this.body.rotation.x = -1.5 * lie;
+        this.body.position.y = 0.12 * lie;
+        this.body.position.z = -0.9 * lie;
+        lL.hip.rotation.x = -1.2 * sit; lR.hip.rotation.x = -0.4 * sit;
+        lL.knee.rotation.x = 1.6 * sit; lR.knee.rotation.x = 0.8 * sit;
+        this.hips.position.y -= 0.35 * sit;
+        this.spine.rotation.x += 0.5 * sit;
+        aL.sh.rotation.x = -0.6 * sit; aR.sh.rotation.x = 0.3 * sit - 0.3 * lie; aR.el.rotation.x = -0.4;
+        this.head.rotation.x = -0.3 * lie + 0.25 * sit;
+        if (A.t >= A.dur) { this.body.position.set(0, 0, 0); this.body.rotation.x = 0; }
       } else if (A.type === 'drink') {
         const d = Math.sin(u * Math.PI);
         this.spine.rotation.x += 0.9 * d; this.hips.position.y -= 0.35 * d;
@@ -349,5 +363,6 @@ function mergeChildren(group) {
   group.add(m);
 }
 
+const smooth = (x) => x * x * (3 - 2 * x);
 const easeOut = (x) => 1 - (1 - x) * (1 - x);
 const easeIn = (x) => x * x;

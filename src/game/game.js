@@ -905,6 +905,9 @@ export class Game {
     this.rig.target.copy(this.player.pos);
     if (!this.loaded) {
       this.rig.yaw = 0;
+      this.player.char.play('wake', 3.2);
+      this.player.frozen = true;
+      setTimeout(() => { this.player.frozen = false; }, 2400);
       setTimeout(() => this.ui.center('Day 1', 'You washed ashore. Gather what you can find.', 3500), 600);
     } else {
       setTimeout(() => this.ui.center('Welcome back', `Day ${this.sky.day}`, 2500), 400);
