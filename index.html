@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0b3a5c" />
+  <title>Our Island</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Nunito+Sans:wght@500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="stats">
+      <div class="stat" id="st-health"><div class="ic">❤</div><div class="bar"><i></i></div></div>
+      <div class="stat" id="st-water"><div class="ic">💧</div><div class="bar"><i></i></div></div>
+      <div class="stat" id="st-food"><div class="ic">🍖</div><div class="bar"><i></i></div></div>
+    </div>
+    <div id="quest"></div>
+    <div id="minimap-wrap"><canvas id="minimap" width="168" height="168"></canvas><div id="clock"></div></div>
+    <div id="toasts"></div>
+    <div id="center-msg"></div>
+    <div id="target-label"><span class="name"></span><div class="hp"><i></i></div></div>
+
+    <div id="hotbar"></div>
+
+    <button id="btn-bag" class="rbtn" aria-label="Backpack"><span class="glyph">🎒</span></button>
+    <div id="btn-cluster">
+      <button id="btn-build" class="rbtn small" aria-label="Build"><span class="glyph">🔨</span></button>
+      <button id="btn-jump" class="rbtn mid" aria-label="Jump"><span class="glyph">⤒</span></button>
+      <button id="btn-action" class="rbtn big" aria-label="Action"><span class="glyph" id="action-glyph">✋</span><span id="action-label">Use</span></button>
+    </div>
+    <div id="build-bar" class="hidden">
+      <div id="build-pieces"></div>
+      <div id="build-ctrls">
+        <button id="bb-rotate" class="pill">⟳ Rotate</button>
+        <button id="bb-place" class="pill primary">✔ Place</button>
+        <button id="bb-cancel" class="pill">✕ Exit</button>
+      </div>
+    </div>
+    <div id="joy"><div id="joy-knob"></div></div>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div id="panel-inner">
+      <div id="tabs">
+        <button data-tab="inv" class="tab active" aria-label="Inventory">🎒</button>
+        <button data-tab="craft" class="tab" aria-label="Crafting">⚒</button>
+        <button data-tab="build" class="tab" aria-label="Building">🏠</button>
+        <button id="panel-close" class="tab close" aria-label="Close">✕</button>
+      </div>
+      <div id="inv-box" class="box">
+        <h2>Inventory</h2>
+        <div id="inv-grid" class="grid"></div>
+        <div id="inv-detail" class="detail"></div>
+      </div>
+      <div id="craft-box" class="box">
+        <h2>Crafting</h2>
+        <div class="craft-wrap">
+          <div id="craft-list" class="list"></div>
+          <div id="craft-detail" class="detail"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="title">
+    <div class="title-inner">
+      <div class="logo"><span>OUR</span><span>ISLAND</span></div>
+      <div class="tag">Stranded. Survive. Build a home.</div>
+      <button id="btn-start" class="pill primary big">Tap to begin</button>
+      <button id="btn-new" class="pill hidden">New island</button>
+      <div class="hint" id="title-hint"></div>
+    </div>
+  </div>
+  <div id="fade"></div>
+  <div id="rotate-hint">↻ Rotate your phone to landscape</div>
+  <div id="loading"><div class="spin"></div><div>Washing ashore…</div></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

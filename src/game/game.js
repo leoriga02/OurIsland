@@ -1,0 +1,729 @@
+// Game orchestrator: world setup, interaction, survival, crafting, building, quests, save/load.
+import * as THREE from 'three';
+import { Terrain } from '../world/terrain.js';
+import { createOcean, createPond } from '../world/water.js';
+import { Sky } from '../world/sky.js';
+import { Nature } from '../world/nature.js';
+import { World } from '../world/world.js';
+import { Props } from '../world/props.js';
+import { shared } from '../world/materials.js';
+import { Player, CameraRig } from '../entities/player.js';
+import { Crabs } from '../entities/crabs.js';
+import { Input } from '../input.js';
+import { Inventory, HOTBAR } from './inventory.js';
+import { ITEMS, RECIPES, PIECES, itemMesh } from './items.js';
+import { Building, pieceObject } from './building.js';
+import { QUESTS, FREE_PLAY } from './quests.js';
+import { Fx } from '../fx/fx.js';
+import { Audio } from '../fx/audio.js';
+import { UI } from '../ui/ui.js';
+import { IconFactory } from '../ui/icons.js';
+import { flameTexture } from '../util/textures.js';
+import { clamp } from '../util/noise.js';
+
+const SAVE_KEY = 'ourisland-save-v1';
+const REACH = { pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0 };
+
+export class Game {
+  constructor({ renderer, scene, camera, quality, canvas }) {
+    Object.assign(this, { renderer, scene, camera, quality, canvas });
+    this.time = 0;
+    this.selected = -1;
+    this.panelOpen = false;
+    this.started = false;
+    this.dead = false;
+    this.stats = { health: 100, water: 72, food: 80 };
+    this.progress = { col: {}, crafted: {}, ate: {}, placed: { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0 }, felled: 0, drank: 0, slept: 0, reachedPeak: false };
+    this.questIndex = 0;
+    this.actionCooldown = 0;
+    this.target = null;
+  }
+
+  init() {
+    const { scene } = this;
+    this.terrain = new Terrain(7);
+    scene.add(this.terrain.buildMesh());
+    const heightTex = this.terrain.buildHeightTexture();
+    this.ocean = createOcean(heightTex); scene.add(this.ocean);
+    this.pond = createPond(heightTex, this.terrain.pond); scene.add(this.pond);
+    this.sky = new Sky(scene, { shadowSize: this.quality >= 2 ? 2048 : 1536 });
+    this.nature = new Nature(scene, this.terrain, { quality: this.quality });
+    this.world = new World(this.terrain, this.nature);
+    this.props = new Props(scene, this.terrain, this.nature, this.world);
+    this.fx = new Fx(scene);
+    this.building = new Building(scene, this.world, this.fx);
+    this.crabs = new Crabs(scene, this.terrain, 14);
+    this.player = new Player(scene, this.world);
+    this.rig = new CameraRig(this.camera, this.world);
+    this.input = new Input(this.canvas);
+    this.inv = new Inventory(24);
+    this.audio = new Audio();
+    this.icons = new IconFactory();
+    this.pieceIcons = {};
+    this.ui = new UI(this);
+    this.respawn = { x: this.terrain.spawn.x, z: this.terrain.spawn.z };
+
+    this.inv.onChange((e) => {
+      this.ui.renderHotbar();
+      if (e.added) this.ui.popSlot(e.slot);
+      this.refreshHeld();
+      if (this.panelOpen) this.ui.refreshPanel();
+      if (this.building.active) this.ui.renderBuildBar();
+    });
+    this.input.onKey = (code) => this.onKey(code);
+    const P = this.player;
+    P.onStep = (s) => this.audio.step(s);
+    P.onJump = () => this.audio.swing();
+    P.onLand = () => this.audio.step('sand');
+    P.onSwimStroke = () => { if (Math.random() < 0.5) this.audio.splash(); this.fx.burst('splash', P.pos.clone().add(new THREE.Vector3(0, 1.0, 0)), 3); };
+
+    // pre-render icons
+    for (const id of Object.keys(ITEMS)) this.icons.item(id);
+    for (const id of Object.keys(PIECES)) this.pieceIcon(id);
+
+    const sp = this.terrain.spawn;
+    P.teleport(sp.x, sp.z, Math.PI);
+    this.rig.yaw = 0;
+    this.load();
+    this.ui.renderHotbar();
+    this.refreshHeld();
+    this._torchFlame = null;
+  }
+
+  pieceIcon(id) {
+    if (!this.pieceIcons[id]) {
+      const obj = pieceObject(id);
+      this.pieceIcons[id] = this.icons.render('piece:' + id, obj, { rx: -0.45, ry: 0.6, pad: 1.05 });
+    }
+    return this.pieceIcons[id];
+  }
+
+  // ---------------- input ----------------
+  onKey(code) {
+    if (!this.started) return;
+    if (code.startsWith('Digit')) { const n = +code.slice(5); if (n >= 1 && n <= HOTBAR) this.selectSlot(n - 1); }
+    if (code === 'Tab' || code === 'KeyI') { this.panelOpen ? this.ui.closePanel() : this.ui.openPanel('inv'); }
+    if (code === 'KeyC') this.ui.openPanel('craft');
+    if (code === 'KeyB') this.toggleBuild();
+    if (code === 'KeyR' && this.building.active) this.building.rotate();
+    if ((code === 'Escape' || code === 'KeyQ')) { if (this.panelOpen) this.ui.closePanel(); else if (this.building.active) this.toggleBuild(false); }
+    if ((code === 'KeyE' || code === 'KeyF') && this.building.active) this.tryPlace();
+  }
+
+  onActionPressed() {
+    if (this.building.active) { this.tryPlace(); return; }
+    this.actionCooldown = 0;
+  }
+
+  selectSlot(i) {
+    const s = this.inv.slots[i];
+    if (!s) { this.selected = this.selected === i ? -1 : i; this.refreshHeld(); this.ui.renderHotbar(); return; }
+    this.useSlot(i);
+  }
+
+  useSlot(i) {
+    const s = this.inv.slots[i];
+    if (!s) return;
+    const it = ITEMS[s.id];
+    if (it.food) { this.eat(i); return; }
+    if (it.place) {
+      if (this.building.active) this.toggleBuild(false);
+      this.toggleBuild(true, it.place);
+      return;
+    }
+    if (it.tool) {
+      if (i >= HOTBAR) { // move tool to hotbar first
+        let free = this.inv.slots.findIndex((x, k) => k < HOTBAR && !x);
+        if (free < 0) free = 0;
+        this.inv.swap(i, free); i = free;
+      }
+      this.selected = this.selected === i ? -1 : i;
+    } else {
+      this.selected = this.selected === i ? -1 : i;
+    }
+    this.refreshHeld();
+    this.ui.renderHotbar();
+  }
+
+  heldTool() {
+    const s = this.inv.slots[this.selected];
+    return s && ITEMS[s.id].tool ? s.id : null;
+  }
+
+  refreshHeld() {
+    const id = this.heldTool();
+    if (id === this._heldId) return;
+    this._heldId = id;
+    const c = this.player.char;
+    if (!id) { c.setHeld(null); this.fx.torch = null; return; }
+    const m = itemMesh(id);
+    m.scale.setScalar(1.4);
+    if (id === 'torch') {
+      const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+      fl.center.set(0.5, 0.1);
+      fl.scale.set(0.22, 0.38, 1);
+      fl.position.set(0, 0.4, 0);
+      m.add(fl);
+      this.fx.torch = fl;
+      this._torchFlame = fl;
+    } else this.fx.torch = null;
+    c.setHeld(m);
+  }
+
+  ensureTool(tool) {
+    if (this.heldTool() === tool) return true;
+    const idx = this.inv.slots.findIndex((s) => s && s.id === tool);
+    if (idx < 0) return false;
+    if (idx >= HOTBAR) { this.useSlot(idx); return true; }
+    this.selected = idx;
+    this.refreshHeld();
+    this.ui.renderHotbar();
+    return true;
+  }
+
+  toggleBuild(on = !this.building.active, piece) {
+    if (on) {
+      if (this.player.swimming) { this.ui.toast(null, "Can't build while swimming", true); return; }
+      this.building.enter(piece || (PIECES[this.building.piece] ? this.building.piece : 'foundation'));
+      this.ui.showBuildBar(true);
+      if (!piece || PIECES[piece]) this.ui.center('Build Mode', 'Aim with the camera · Place with the action button', 2200);
+    } else {
+      this.building.exit();
+      this.ui.showBuildBar(false);
+    }
+  }
+
+  // ---------------- crafting / consuming ----------------
+  craft(r) {
+    if (!this.inv.consume(r.cost)) { this.audio.error(); return; }
+    const n = r.n || 1;
+    const left = this.inv.add(r.out, n);
+    if (left) this.ui.toast(null, 'Backpack full!', true);
+    this.progress.crafted[r.out] = (this.progress.crafted[r.out] || 0) + n;
+    this.ui.toast(r.out, `Crafted ${ITEMS[r.out].name}`);
+    this.audio.craft();
+    this.fx.sparkle(this.player.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), 12);
+    if (ITEMS[r.out].tool && this.heldTool() === null) {
+      const idx = this.inv.slots.findIndex((s) => s && s.id === r.out);
+      if (idx >= 0 && idx < HOTBAR) { this.selected = idx; this.refreshHeld(); this.ui.renderHotbar(); }
+    }
+    this.checkQuest();
+  }
+
+  eat(i) {
+    const s = this.inv.slots[i];
+    const it = ITEMS[s.id];
+    if (this.player.char.busy) return;
+    const id = s.id;
+    this.inv.removeAt(i, 1);
+    this.player.char.play('eat', 0.8);
+    this.audio.eat();
+    const S = this.stats;
+    S.food = clamp(S.food + (it.food || 0), 0, 100);
+    S.water = clamp(S.water + (it.water || 0), 0, 100);
+    S.health = clamp(S.health + (it.health || 0), 0, 100);
+    this.progress.ate[id] = (this.progress.ate[id] || 0) + 1;
+    const parts = [];
+    if (it.food) parts.push(`+${it.food} food`);
+    if (it.water) parts.push(`+${it.water} water`);
+    if (it.health) parts.push(`${it.health > 0 ? '+' : ''}${it.health} health`);
+    this.ui.toast(id, parts.join(' · '), (it.health || 0) < 0);
+    this.checkQuest();
+  }
+
+  give(id, n, silent) {
+    const left = this.inv.add(id, n);
+    if (n - left > 0) {
+      this.progress.col[id] = (this.progress.col[id] || 0) + (n - left);
+      if (!silent) this.ui.toast(id, `+${n - left} ${ITEMS[id].name}`);
+    }
+    if (left > 0) this.ui.toast(null, 'Backpack full!', true);
+  }
+
+  // ---------------- interaction ----------------
+  findTarget() {
+    const P = this.player, p = P.pos;
+    if (P.swimming) return null;
+    const fwd = P.forward;
+    let best = null, bestScore = 1e9;
+    const consider = (o, kind, reach) => {
+      const dx = o.x - p.x, dz = o.z - p.z;
+      const d = Math.hypot(dx, dz);
+      const edge = d - (o.r || 0.3);
+      if (edge > reach) return;
+      const dot = d > 0.01 ? (dx * fwd.x + dz * fwd.z) / d : 1;
+      if (dot < (edge < 0.6 ? -0.3 : 0.25)) return;
+      if (Math.abs((o.y ?? p.y) - p.y) > 2.2) return;
+      const score = edge - dot * 0.9;
+      if (score < bestScore) { bestScore = score; best = { o, kind }; }
+    };
+    for (const r of this.nature.query(p.x, p.z, 5)) if (r.alive) consider(r, r.kind, REACH[r.kind] || 1.5);
+    for (const c of this.crabs.list) if (c.alive) consider(c, 'crab', REACH.crab);
+    for (const pl of this.building.placeables) consider({ ...pl, r: 0.5, ref: pl }, pl.type, REACH[pl.type]);
+    if (best) return best;
+    // water
+    const T = this.terrain;
+    const ax = p.x + fwd.x * 1.4, az = p.z + fwd.z * 1.4;
+    if (T.isInPond(ax, az, 1.2) || T.isInPond(p.x, p.z, 1.0)) return { kind: 'water', fresh: true, o: { x: ax, z: az } };
+    if (T.heightAt(ax, az) < -0.05) return { kind: 'water', fresh: false, o: { x: ax, z: az } };
+    return null;
+  }
+
+  describe(t) {
+    if (!t) {
+      const tool = this.heldTool();
+      if (tool && tool !== 'torch') return { label: 'Swing', icon: 'item:' + tool, ready: false };
+      return { label: 'Use', icon: 'hand', ready: false };
+    }
+    const o = t.o;
+    switch (t.kind) {
+      case 'pickup': return { label: 'Pick up', icon: 'hand', ready: true, name: o.label };
+      case 'fiber': return { label: 'Gather', icon: 'hand', ready: true, name: 'Fiber Plant' };
+      case 'berry': return { label: 'Pick', icon: 'eat', ready: true, name: 'Berry Bush' };
+      case 'palm': case 'tree': {
+        const has = this.inv.count('axe') > 0;
+        return { label: has ? 'Chop' : 'Need Axe', icon: 'item:axe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
+      }
+      case 'node': {
+        const has = this.inv.count('pickaxe') > 0;
+        return { label: has ? 'Mine' : 'Need Pickaxe', icon: 'item:pickaxe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
+      }
+      case 'crab': return { label: 'Catch', icon: 'hand', ready: true, name: 'Crab' };
+      case 'campfire': return this.inv.count('crab_raw') > 0 ? { label: 'Cook', icon: 'fire', ready: true, name: 'Campfire' } : { label: 'Warm up', icon: 'fire', ready: true, name: 'Campfire' };
+      case 'bed': return { label: this.sky.isNight() || this.sky.hours > 18.5 ? 'Sleep' : 'Rest', icon: 'moon', ready: true, name: 'Leaf Bed' };
+      case 'water': return t.fresh ? { label: 'Drink', icon: 'drink', ready: true, name: 'Fresh Water' } : { label: 'Drink', icon: 'drink', ready: true, name: 'Sea Water' };
+    }
+    return { label: 'Use', icon: 'hand', ready: false };
+  }
+
+  faceTarget(o) {
+    const P = this.player;
+    P.facing = Math.atan2(o.x - P.pos.x, o.z - P.pos.z);
+  }
+
+  doAction() {
+    const t = this.target;
+    const P = this.player, c = P.char;
+    if (c.busy || P.swimming || this.dead) return;
+    if (!t) {
+      const tool = this.heldTool();
+      if (tool && tool !== 'torch') { c.play('chop', 0.6); this.audio.swing(); this.actionCooldown = 0.65; }
+      return;
+    }
+    const o = t.o;
+    const time = this.time;
+    switch (t.kind) {
+      case 'pickup': case 'fiber': case 'berry': {
+        this.faceTarget(o);
+        c.play('gather', 0.55, () => {
+          if (!o.alive) return;
+          if (t.kind === 'pickup') {
+            this.give(o.item, 1);
+            this.nature.remove(o, 180, time);
+            this.audio.pickup();
+          } else if (t.kind === 'fiber') {
+            this.give('fiber', 2 + (Math.random() < 0.4 ? 1 : 0));
+            this.nature.remove(o, 160, time);
+            this.fx.burst('grass', new THREE.Vector3(o.x, o.y + 0.6, o.z), 10);
+            this.audio.rustle();
+          } else {
+            this.give('berries', 2 + Math.floor(Math.random() * 2));
+            this.nature.remove(o, 200, time);
+            this.fx.burst('berry', new THREE.Vector3(o.x, o.y + 0.9, o.z), 8);
+            this.audio.rustle();
+          }
+        }, 0.5);
+        this.actionCooldown = 0.6;
+        break;
+      }
+      case 'palm': case 'tree': {
+        if (!this.ensureTool('axe')) { this.ui.toast('axe', 'You need a Stone Axe', true); this.audio.error(); this.actionCooldown = 1; return; }
+        this.faceTarget(o);
+        this.audio.swing();
+        c.play('chop', 0.62, () => {
+          if (!o.alive) return;
+          o.hp--;
+          const hitAt = new THREE.Vector3(o.x, o.y + 1.1, o.z).addScaledVector(P.forward, -0.35);
+          this.fx.burst('wood', hitAt, 14);
+          this.audio.chop();
+          this.rig.shake(0.05, 0.15);
+          this.nature.shake(o, 1, P.pos.x, P.pos.z);
+          if (o.hp <= 0) {
+            o.alive = false;
+            if (o.collider) o.collider.active = false;
+            this.nature.fellTree(o, P.pos.x, P.pos.z, () => {
+              this.audio.treeFall();
+              this.rig.shake(0.12, 0.35);
+              const fall = new THREE.Vector3(o.x, o.y + 0.3, o.z).addScaledVector(new THREE.Vector3(o.x - P.pos.x, 0, o.z - P.pos.z).normalize(), 3);
+              this.fx.burst('leaf', fall.clone().add(new THREE.Vector3(0, 0.5, 0)), 24);
+              this.fx.burst('dust', fall, 14);
+              if (o.kind === 'palm') {
+                this.give('wood', 3); this.give('leaf', 3);
+                if (Math.random() < 0.6) this.give('coconut', 1 + (Math.random() < 0.3 ? 1 : 0));
+              } else {
+                this.give('wood', 4); this.give('stick', 2);
+                if (Math.random() < 0.3) this.give('leaf', 1);
+              }
+              this.progress.felled++;
+              this.checkQuest();
+            });
+            o.respawnAt = time + 300;
+          }
+        }, 0.55);
+        this.actionCooldown = 0.65;
+        break;
+      }
+      case 'node': {
+        if (!this.ensureTool('pickaxe')) { this.ui.toast('pickaxe', 'You need a Stone Pickaxe', true); this.audio.error(); this.actionCooldown = 1; return; }
+        this.faceTarget(o);
+        this.audio.swing();
+        c.play('mine', 0.65, () => {
+          if (!o.alive) return;
+          o.hp--;
+          const hitAt = new THREE.Vector3(o.x, o.y + 0.6, o.z).addScaledVector(P.forward, -o.r * 0.8);
+          this.fx.burst('stone', hitAt, 14);
+          this.fx.sparkle(hitAt, 4, 0xffc070);
+          this.audio.mine();
+          this.rig.shake(0.05, 0.15);
+          this.nature.shake(o, 0.6, P.pos.x, P.pos.z);
+          this.give('stone', 1);
+          if (o.hp <= 0) {
+            this.give('stone', 3);
+            this.fx.burst('dust', new THREE.Vector3(o.x, o.y + 0.4, o.z), 20);
+            this.nature.remove(o, 240, time);
+          }
+        }, 0.55);
+        this.actionCooldown = 0.7;
+        break;
+      }
+      case 'crab': {
+        this.faceTarget(o);
+        c.play(this.heldTool() && this.heldTool() !== 'torch' ? 'attack' : 'gather', 0.5, () => {
+          if (!o.alive) return;
+          if (Math.hypot(o.x - P.pos.x, o.z - P.pos.z) > 2.2) { this.ui.toast(null, 'Missed! Crabs are quick…'); return; }
+          o.hp -= this.heldTool() ? 2 : 1;
+          this.fx.burst('splash', new THREE.Vector3(o.x, o.y + 0.2, o.z), 6);
+          this.audio.hit(1500, 0.08, 0.3, 2);
+          if (o.hp <= 0) { this.crabs.kill(o, time); this.give('crab_raw', 1); this.audio.pickup(); }
+        }, 0.5);
+        this.actionCooldown = 0.55;
+        break;
+      }
+      case 'water': {
+        if (!t.fresh) { this.ui.toast(null, 'Too salty! Find fresh water inland.', true); this.audio.error(); this.actionCooldown = 1.2; return; }
+        this.faceTarget(o);
+        c.play('drink', 1.1, () => {
+          this.stats.water = clamp(this.stats.water + 35, 0, 100);
+          this.progress.drank++;
+          this.audio.drink();
+          this.fx.burst('splash', P.pos.clone().addScaledVector(P.forward, 0.8).add(new THREE.Vector3(0, 0.2, 0)), 10);
+          this.ui.toast(null, '💧 +35 water');
+          this.checkQuest();
+        }, 0.5);
+        this.actionCooldown = 1.2;
+        break;
+      }
+      case 'campfire': {
+        this.faceTarget(o);
+        if (this.inv.count('crab_raw') > 0) {
+          c.play('gather', 1.4, () => {
+            if (this.inv.remove('crab_raw', 1)) {
+              this.inv.add('crab_cooked', 1);
+              this.progress.crafted.crab_cooked = (this.progress.crafted.crab_cooked || 0) + 1;
+              this.ui.toast('crab_cooked', 'Cooked a Grilled Crab!');
+              this.audio.craft();
+              this.checkQuest();
+            }
+          }, 0.8);
+          this.actionCooldown = 1.5;
+        } else {
+          this.ui.toast(null, '🔥 Warm and cozy. Catch crabs on the beach to cook them.');
+          this.actionCooldown = 2;
+        }
+        break;
+      }
+      case 'bed': {
+        this.sleep(o.ref);
+        this.actionCooldown = 3;
+        break;
+      }
+    }
+  }
+
+  sleep(bed) {
+    const night = this.sky.isNight() || this.sky.hours > 18.5 || this.sky.hours < 5;
+    this.respawn = { x: bed.x, z: bed.z };
+    this.progress.slept++;
+    if (!night) {
+      this.ui.center('Rested', 'Respawn point set. Sleep here at night to skip to morning.', 2800);
+      this.stats.health = clamp(this.stats.health + 10, 0, 100);
+      this.audio.quest();
+      this.checkQuest();
+      this.save();
+      return;
+    }
+    const fade = document.getElementById('fade');
+    fade.classList.add('on');
+    this.player.frozen = true;
+    setTimeout(() => {
+      this.sky.time = 0.27;
+      this.sky.day++;
+      this.stats.health = clamp(this.stats.health + 35, 0, 100);
+      this.stats.food = clamp(this.stats.food - 12, 0, 100);
+      this.stats.water = clamp(this.stats.water - 12, 0, 100);
+      fade.classList.remove('on');
+      this.player.frozen = false;
+      this.ui.center(`Day ${this.sky.day}`, 'A new morning on the island', 3000);
+      this.checkQuest();
+      this.save();
+    }, 1600);
+  }
+
+  tryPlace() {
+    const B = this.building;
+    const t = B.target;
+    if (!t) return;
+    const piece = B.piece;
+    const isItem = piece === 'campfire' || piece === 'bed';
+    const cost = isItem ? { [piece]: 1 } : PIECES[piece].cost;
+    if (!this.inv.has(cost)) {
+      const miss = Object.entries(cost).filter(([k, n]) => this.inv.count(k) < n).map(([k, n]) => `${n - this.inv.count(k)} ${ITEMS[k].name}`).join(', ');
+      this.ui.toast(null, `Need ${miss}`, true); this.audio.error(); return;
+    }
+    if (!t.ok) {
+      const why = piece === 'foundation' ? 'Needs clear, fairly flat ground' : piece === 'roof' ? 'Roofs go on top of a foundation' : isItem ? 'Find a clear flat spot' : 'Walls attach to a foundation edge';
+      this.ui.toast(null, why, true); this.audio.error(); return;
+    }
+    this.inv.consume(cost);
+    B.placePiece(piece, t, true);
+    this.audio.build();
+    this.player.char.play('build', 0.5);
+    this.rig.shake(0.04, 0.15);
+    const pl = this.progress.placed;
+    if (piece === 'foundation') pl.foundation++;
+    else if (piece === 'roof') pl.roof++;
+    else if (piece === 'campfire') pl.campfire++;
+    else if (piece === 'bed') pl.bed++;
+    else { pl.walls++; if (piece === 'doorway') pl.doorway++; }
+    if (isItem) this.toggleBuild(false);
+    this.checkShelter();
+    this.checkQuest();
+    this.save();
+  }
+
+  checkShelter() {
+    if (this.progress.shelterDone) return;
+    const s = this.building.shelterCells();
+    if (s.length) {
+      this.progress.shelterDone = true;
+      this.ui.center('Shelter Complete!', 'You built your first home on the island', 3500);
+      this.audio.quest();
+      const c = s[0];
+      this.fx.sparkle(new THREE.Vector3((c.i + 0.5) * 3, this.player.pos.y + 1.5, (c.j + 0.5) * 3), 40);
+    }
+  }
+
+  // ---------------- quests ----------------
+  currentQuest() {
+    if (this.questIndex >= QUESTS.length) return FREE_PLAY(this.progress);
+    const q = QUESTS[this.questIndex];
+    return { title: q.title, lines: q.lines(this.progress), hint: q.hint };
+  }
+
+  checkQuest() {
+    if (this.questIndex >= QUESTS.length) return;
+    const q = this.currentQuest();
+    if (q.lines.every((l) => l.done) && !this._questPending) {
+      this._questPending = true;
+      this.ui.setQuest(q);
+      setTimeout(() => {
+        this.audio.quest();
+        this.ui.center('Objective Complete', q.title, 2200);
+        this.fx.sparkle(this.player.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), 18);
+        this.questIndex++;
+        this._questPending = false;
+        if (this.questIndex >= QUESTS.length) {
+          setTimeout(() => this.ui.center('Home, Sweet Home', 'The island is yours to explore', 3500), 2400);
+        }
+        this.checkQuest();
+      }, 700);
+    }
+  }
+
+  // ---------------- survival ----------------
+  updateSurvival(dt) {
+    const S = this.stats, P = this.player;
+    const exert = P.running ? 1.7 : P.swimming ? 1.5 : 1;
+    const nearFire = this.building.placeables.some((p) => p.type === 'campfire' && Math.hypot(p.x - P.pos.x, p.z - P.pos.z) < 5);
+    S.water -= dt * 0.16 * exert;
+    S.food -= dt * 0.105 * exert;
+    if (S.water <= 0 || S.food <= 0) {
+      S.health -= dt * (S.water <= 0 && S.food <= 0 ? 1.6 : 0.8);
+      if (!this._starveWarn || this.time - this._starveWarn > 12) { this._starveWarn = this.time; this.ui.toast(null, S.water <= 0 ? 'You are dehydrated!' : 'You are starving!', true); this.audio.hurt(); }
+    } else if (S.water > 35 && S.food > 35) {
+      S.health += dt * (nearFire || this.building.isSheltered(P.pos.x, P.pos.z) ? 0.6 : 0.25);
+    }
+    S.water = clamp(S.water, 0, 100); S.food = clamp(S.food, 0, 100); S.health = clamp(S.health, 0, 100);
+    if (S.health <= 0 && !this.dead) this.die();
+    if (!this._lowWarn || this.time - this._lowWarn > 40) {
+      if (S.water < 25) { this._lowWarn = this.time; this.ui.toast(null, 'Thirsty… find fresh water or coconuts.', true); }
+      else if (S.food < 25) { this._lowWarn = this.time; this.ui.toast(null, 'Hungry… berries, coconuts or crabs.', true); }
+    }
+  }
+
+  die() {
+    this.dead = true;
+    const fade = document.getElementById('fade');
+    this.ui.center('You passed out…', 'Rest will bring you back', 2500);
+    fade.classList.add('on');
+    this.player.frozen = true;
+    setTimeout(() => {
+      const r = this.respawn;
+      this.player.teleport(r.x + 1, r.z + 1);
+      this.stats = { health: 60, water: 55, food: 55 };
+      this.sky.time = Math.max(this.sky.time, 0.27);
+      fade.classList.remove('on');
+      this.player.frozen = false;
+      this.dead = false;
+    }, 2400);
+  }
+
+  // ---------------- save / load ----------------
+  save() {
+    if (!this.started) return;
+    try {
+      const depleted = [];
+      this.nature.all.forEach((r, i) => { if (!r.alive) depleted.push([i, Math.max(0, (r.respawnAt || 0) - this.time)]); });
+      const data = {
+        v: 1, stats: this.stats, progress: this.progress, questIndex: this.questIndex, inv: this.inv.toJSON(), selected: this.selected,
+        time: this.sky.time, day: this.sky.day, player: { x: this.player.pos.x, z: this.player.pos.z, f: this.player.facing },
+        building: this.building.toJSON(), respawn: this.respawn, depleted,
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } }
+  clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
+
+  load() {
+    let d;
+    try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { d = null; }
+    if (!d || d.v !== 1) return false;
+    Object.assign(this.stats, d.stats);
+    this.progress = Object.assign(this.progress, d.progress);
+    this.progress.placed = Object.assign({ foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0 }, d.progress.placed);
+    this.questIndex = d.questIndex || 0;
+    this.inv.load(d.inv || []);
+    this.selected = d.selected ?? -1;
+    this.sky.time = d.time ?? 0.33; this.sky.day = d.day || 1;
+    this.building.load(d.building);
+    this.respawn = d.respawn || this.respawn;
+    for (const [i, rem] of d.depleted || []) {
+      const r = this.nature.all[i];
+      if (r) this.nature.remove(r, rem || 60, 0);
+    }
+    if (d.player) this.player.teleport(d.player.x, d.player.z, d.player.f);
+    this.rig.yaw = this.player.facing + Math.PI;
+    this.loaded = true;
+    return true;
+  }
+
+  // ---------------- main loop ----------------
+  update(dt) {
+    this.time += dt;
+    shared.uTime.value += dt;
+    const P = this.player;
+    const inputEnabled = this.started && !this.panelOpen && !this.dead;
+    this.input.enabled = inputEnabled;
+    const intent = this.input.poll();
+
+    if (this.started) {
+      P.update(dt, intent, this.rig.yaw);
+      this.rig.update(dt, P, intent);
+    } else {
+      // title-screen orbit
+      this.titleYaw = (this.titleYaw ?? 0.6) + dt * 0.05;
+      const sp = this.terrain.spawn;
+      const cx = sp.x - 5, cz = sp.z - 40;
+      this.camera.position.set(cx + Math.sin(this.titleYaw) * 90, 32, cz + Math.cos(this.titleYaw) * 90);
+      this.camera.lookAt(cx, 8, cz);
+      P.update(dt, { x: 0, y: 0, sprint: false, jump: false }, 0);
+    }
+
+    this.sky.update(dt, this.started ? P.pos : this.camera.position);
+    this.sky.applyToWater(this.ocean.material); this.sky.applyToWater(this.pond.material);
+    this.ocean.material.uniforms.uTime.value += dt;
+    this.pond.material.uniforms.uTime.value += dt;
+    this.nature.update(dt, this.camera.position, this.time);
+    this.crabs.update(dt, P, this.time);
+    this.props.update(dt, this.time);
+    this.building.animate(dt);
+    this.fx.update(dt, this.camera.position, this.sky.night);
+    this.fx.setScale(this.renderer.domElement.height / this.renderer.getPixelRatio() * 0.9);
+
+    if (!this.started) return;
+
+    // building ghost
+    if (this.building.active) {
+      const B = this.building;
+      const cost = B.piece === 'campfire' || B.piece === 'bed' ? { [B.piece]: 1 } : PIECES[B.piece].cost;
+      B.update(dt, P, this.rig.yaw, this.inv.has(cost));
+      this.ui.setAction({ label: 'Place', icon: 'hammer', ready: B.target && B.target.ok && this.inv.has(cost) });
+      this.ui.setTarget(null);
+    } else {
+      // interaction target
+      this.target = this.findTarget();
+      const d = this.describe(this.target);
+      this.ui.setAction(d);
+      this.ui.setTarget(this.target ? d.name : null, d.hp);
+      this.actionCooldown -= dt;
+      if (intent.action && this.actionCooldown <= 0 && !P.char.busy) this.doAction();
+    }
+
+    this.updateSurvival(dt);
+    if (!this.progress.reachedPeak && P.pos.y > 28) { this.progress.reachedPeak = true; this.ui.center('What a view!', 'You climbed high into the peaks', 2500); }
+
+    // HUD
+    this.ui.setStats(this.stats);
+    this.ui.setQuest(this.currentQuest());
+    this.hudT = (this.hudT || 0) - dt;
+    if (this.hudT <= 0) {
+      this.hudT = 0.1;
+      const markers = [{ x: this.terrain.pond.x, z: this.terrain.pond.z, color: '#4fc8ff', r: 6, glyph: '~' }];
+      for (const p of this.building.placeables) markers.push({ x: p.x, z: p.z, color: p.type === 'campfire' ? '#ff8a2a' : '#e8b04a', r: 4 });
+      for (const [k] of this.building.cells) { const [i, j] = k.split(',').map(Number); markers.push({ x: (i + 0.5) * 3, z: (j + 0.5) * 3, color: '#c89050', r: 3 }); }
+      this.ui.drawMinimap(P, markers);
+      this.ui.setClock(this.sky.hours, this.sky.day);
+    }
+    // ambience
+    this.audio.update(dt, { coastDist: this.terrain.coastDist(P.pos.x, P.pos.z), night: this.sky.night });
+    // night warning
+    const nightNow = this.sky.night > 0.5;
+    if (nightNow && !this._wasNight) this.ui.toast(null, '🌙 Night falls. Stay near a fire or sleep.');
+    this._wasNight = nightNow;
+    // hint sparkles on nearby pickups early on
+    this.sparkT = (this.sparkT || 0) - dt;
+    if (this.questIndex <= 1 && this.sparkT <= 0) {
+      this.sparkT = 1.6;
+      const want = this.questIndex === 0 ? 'pickup' : 'fiber';
+      const near = this.nature.query(P.pos.x, P.pos.z, 18).filter((r) => r.alive && r.kind === want).sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z)).slice(0, 3);
+      for (const r of near) this.fx.sparkle(new THREE.Vector3(r.x, r.y + 0.2, r.z), 3);
+    }
+    // autosave
+    this.saveT = (this.saveT || 0) + dt;
+    if (this.saveT > 20) { this.saveT = 0; this.save(); }
+  }
+
+  start() {
+    this.started = true;
+    this.audio.unlock();
+    this.rig.target.copy(this.player.pos);
+    if (!this.loaded) {
+      this.rig.yaw = 0;
+      setTimeout(() => this.ui.center('Day 1', 'You washed ashore. Gather what you can find.', 3500), 600);
+    } else {
+      setTimeout(() => this.ui.center('Welcome back', `Day ${this.sky.day}`, 2500), 400);
+    }
+  }
+}
