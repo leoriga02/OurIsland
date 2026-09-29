@@ -165,8 +165,9 @@ export class Building {
     this.active = false;
     this.piece = 'foundation';
     this.rot = 0;
-    this.ghostOk = new THREE.MeshBasicMaterial({ color: 0x6aff8a, transparent: true, opacity: 0.38, depthWrite: false });
+    this.ghostOk = new THREE.MeshBasicMaterial({ color: 0x3aff7a, transparent: true, opacity: 0.38, depthWrite: false, blending: THREE.AdditiveBlending });
     this.ghostBad = new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, opacity: 0.38, depthWrite: false });
+    this.ghostLine = new THREE.LineBasicMaterial({ color: 0xb8ffc8, transparent: true, opacity: 0.8, depthWrite: false });
     this.ghost = null;
     this.target = null;
   }
@@ -187,6 +188,14 @@ export class Building {
     if (this.ghost) this.scene.remove(this.ghost);
     this.ghost = pieceObject(p, this.ghostOk);
     this.ghost.traverse((o) => { if (o.isMesh) o.renderOrder = 5; });
+    // glowing outline like a holographic blueprint
+    this.edgeCache ||= {};
+    if (!this.edgeCache[p]) this.edgeCache[p] = this.ghost.children.filter((m) => m.isMesh).map((m) => new THREE.EdgesGeometry(m.geometry, 35));
+    for (const eg of this.edgeCache[p]) {
+      const l = new THREE.LineSegments(eg, this.ghostLine);
+      l.renderOrder = 6;
+      this.ghost.add(l);
+    }
     this.scene.add(this.ghost);
     this.ghostValid = true;
   }
@@ -272,6 +281,7 @@ export class Building {
     if (valid !== this.ghostValid) {
       this.ghostValid = valid;
       this.ghost.traverse((o) => { if (o.isMesh) o.material = valid ? this.ghostOk : this.ghostBad; });
+      this.ghostLine.color.set(valid ? 0xb8ffc8 : 0xffb0a0);
     }
     const pulse = 0.3 + 0.1 * Math.sin(performance.now() / 180);
     this.ghostOk.opacity = pulse; this.ghostBad.opacity = pulse;
