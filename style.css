@@ -160,7 +160,7 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
 .detail b { color: var(--text); font-size: 15px; display: block; }
 .detail .acts { margin-top: 8px; display: flex; gap: 6px; }
 .craft-wrap { display: flex; gap: 12px; }
-.list { display: flex; flex-direction: column; gap: 5px; width: 210px; max-height: 300px; overflow-y: auto; }
+.list { display: flex; flex-direction: column; gap: 5px; width: 210px; max-height: 300px; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .citem { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; border-radius: 8px; background: rgba(255,255,255,0.03); border: 1px solid transparent; font-weight: 700; font-size: 13.5px; text-align: left; }
 .citem img { width: 38px; height: 38px; background: rgba(0,0,0,0.25); border-radius: 6px; }
 .citem.sel { background: linear-gradient(90deg, #2d5572, #22425a); border-color: #4f94c2; }
@@ -171,7 +171,7 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
 .cost { width: 58px; height: 62px; border-radius: 8px; background: rgba(0,0,0,0.28); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #9fe39a; }
 .cost img { width: 38px; height: 38px; }
 .cost.miss { color: #ff8a7a; }
-.craft-btn { margin-top: auto; padding: 10px; border-radius: 8px; font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700; letter-spacing: 1.5px; background: linear-gradient(180deg, #4fae58, #2c7a36); border: 1px solid #72d27a; box-shadow: 0 3px 10px rgba(0,0,0,0.4); }
+.craft-btn { margin-top: auto; padding: 10px; border-radius: 8px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); font-family: 'Cinzel', serif; font-size: 17px; font-weight: 700; letter-spacing: 1.5px; background: linear-gradient(180deg, #4fae58, #2c7a36); border: 1px solid #72d27a; box-shadow: 0 3px 10px rgba(0,0,0,0.4); }
 .craft-btn:disabled { filter: grayscale(0.9) brightness(0.6); }
 
 /* ---------------- title / overlays ---------------- */
@@ -215,4 +215,13 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
   .logo span:last-child { font-size: 48px; }
   .title-inner { margin-top: 10vh; }
   .tab { width: 44px; height: 44px; }
+}
+
+/* narrow landscape phones (incl. notch safe areas): anchor bars next to the backpack button */
+@media (max-width: 920px) {
+  #hotbar { left: calc(84px + var(--safe-l)); transform: none; }
+  #build-bar { left: calc(84px + var(--safe-l)); transform: none; }
+  #hotbar .slot { width: 42px; height: 42px; }
+  #hotbar .slot img { width: 34px; height: 34px; }
+  #target-label { left: calc(84px + var(--safe-l) + 190px); }
 }

@@ -59,6 +59,9 @@ export class UI {
 
   // ---------- HUD ----------
   setStats(s) {
+    const key = Math.round(s.health) + ',' + Math.round(s.water) + ',' + Math.round(s.food);
+    if (key === this._statKey) return;
+    this._statKey = key;
     for (const k of ['health', 'water', 'food']) {
       const el = this.stats[k];
       el.querySelector('i').style.width = Math.max(0, s[k]) + '%';
@@ -97,6 +100,9 @@ export class UI {
   }
 
   setTarget(label, hp) {
+    const key = label + '|' + (hp == null ? '' : hp.toFixed(2));
+    if (key === this._targetKey) return;
+    this._targetKey = key;
     const el = $('target-label');
     if (!label) { el.classList.remove('show'); return; }
     el.classList.add('show');
@@ -295,8 +301,10 @@ export class UI {
   }
 
   // ---------- build bar ----------
-  showBuildBar(on) {
+  showBuildBar(on, placing = null) {
     $('build-bar').classList.toggle('hidden', !on);
+    $('build-pieces').classList.toggle('hidden', !!placing);
+    $('bb-rotate').classList.toggle('hidden', !!placing && placing !== 'Leaf Bed');
     this.hotbar.classList.toggle('hidden', on);
     $('btn-build').classList.toggle('on', on);
     if (on) this.renderBuildBar();

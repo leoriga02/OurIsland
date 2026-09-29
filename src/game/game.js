@@ -191,9 +191,13 @@ export class Game {
   toggleBuild(on = !this.building.active, piece) {
     if (on) {
       if (this.player.swimming) { this.ui.toast(null, "Can't build while swimming", true); return; }
-      this.building.enter(piece || (PIECES[this.building.piece] ? this.building.piece : 'foundation'));
-      this.ui.showBuildBar(true);
-      if (!piece || PIECES[piece]) this.ui.center('Build Mode', 'Aim with the camera · Place with the action button', 2200);
+      const p = piece || (PIECES[this.building.piece] ? this.building.piece : 'foundation');
+      this.building.enter(p);
+      const item = !PIECES[p];
+      this.ui.showBuildBar(true, item ? ITEMS[p].name : null);
+      this.buildHints = (this.buildHints || 0) + 1;
+      if (item) this.ui.center(`Place ${ITEMS[p].name}`, 'Aim with the camera · tap the action button', 1800);
+      else if (this.buildHints <= 2) this.ui.center('Build Mode', 'Aim with the camera · Place with the action button', 2200);
     } else {
       this.building.exit();
       this.ui.showBuildBar(false);
@@ -677,6 +681,7 @@ export class Game {
 
     if (this.started) {
       P.update(dt, intent, this.rig.yaw);
+      this.rig.building = this.building.active;
       this.rig.update(dt, P, intent);
       if (this.intro && this.intro.t < 1) {
         const I = this.intro;

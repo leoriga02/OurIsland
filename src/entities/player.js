@@ -144,8 +144,10 @@ export class CameraRig {
       this.pitch = clamp(this.pitch + intent.look.dy * 0.004, -0.25, 1.25);
       this.dist = clamp(this.dist + intent.zoom, 2.8, 11);
     }
+    // build mode: pull back and look down a bit for an overview
+    this.buildBlend = damp(this.buildBlend || 0, this.building ? 1 : 0, 4, dt);
     // gentle auto-follow behind the player while moving
-    if (now - this.lastInput > 2200 && player.speed > 2.5 && !player.char.busy) {
+    if (now - this.lastInput > 2200 && player.speed > 2.5 && !player.char.busy && !this.building) {
       const want = player.facing + Math.PI;
       this.yaw = angleDamp(this.yaw, want, 0.9, dt);
     }
@@ -155,14 +157,15 @@ export class CameraRig {
     t.x = damp(t.x, tx, 14, dt); t.z = damp(t.z, tz, 14, dt); t.y = damp(t.y, ty, 8, dt);
     if (t.distanceToSquared(player.pos) > 400) t.set(tx, ty, tz);
 
-    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+    const pitch = this.pitch + this.buildBlend * Math.max(0, 0.55 - this.pitch);
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
     const ox = Math.sin(this.yaw) * cp, oy = sp, oz = Math.cos(this.yaw) * cp;
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const shoulder = 0.42;
     const base = new THREE.Vector3(t.x + right.x * shoulder, t.y, t.z + right.z * shoulder);
 
     // terrain collision along the boom
-    let d = this.dist;
+    let d = this.dist + this.buildBlend * 2.5;
     const T = this.world.terrain;
     for (let i = 1; i <= 8; i++) {
       const k = (i / 8) * d;
