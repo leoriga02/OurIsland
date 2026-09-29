@@ -29,17 +29,17 @@ function fabricTexture(base, speck, seed) {
 }
 
 const mats = () => ({
-  skin: new THREE.MeshStandardMaterial({ color: 0xa9704e, roughness: 0.58 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0x9e6c50, roughness: 0.58 }),
   stubble: new THREE.MeshStandardMaterial({ color: 0x80563c, roughness: 0.8 }),
-  shirt: new THREE.MeshStandardMaterial({ map: fabricTexture('#cdb994', '90,62,38', 1), roughness: 0.95 }),
-  shorts: new THREE.MeshStandardMaterial({ map: fabricTexture('#534a3c', '30,24,18', 2), roughness: 0.95 }),
-  leather: new THREE.MeshStandardMaterial({ map: fabricTexture('#6a4428', '30,18,8', 3), roughness: 0.75 }),
-  pack: new THREE.MeshStandardMaterial({ map: fabricTexture('#6b5034', '35,22,12', 4), roughness: 0.85 }),
+  shirt: new THREE.MeshStandardMaterial({ color: 0xcdb994, roughness: 0.95 }),
+  shorts: new THREE.MeshStandardMaterial({ color: 0x534a3c, roughness: 0.95 }),
+  leather: new THREE.MeshStandardMaterial({ color: 0x6a4428, roughness: 0.75 }),
+  pack: new THREE.MeshStandardMaterial({ color: 0x6b5034, roughness: 0.85 }),
   boot: new THREE.MeshStandardMaterial({ color: 0x4e3320, roughness: 0.7 }),
   sole: new THREE.MeshStandardMaterial({ color: 0x22180f, roughness: 0.9 }),
   hair: new THREE.MeshStandardMaterial({ color: 0x2c1b10, roughness: 0.75 }),
   eye: new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: 0.3 }),
-  roll: new THREE.MeshStandardMaterial({ map: fabricTexture('#6f6a48', '30,30,15', 5), roughness: 0.95 }),
+  roll: new THREE.MeshStandardMaterial({ color: 0x6f6a48, roughness: 0.95 }),
   metal: new THREE.MeshStandardMaterial({ color: 0x9a8a6a, roughness: 0.4, metalness: 0.7 }),
 });
 
@@ -319,23 +319,34 @@ export class Character {
   }
 }
 
+// One shared material: per-part colours live in vertex colours, a light fabric texture adds grain.
+let CHAR_MAT = null;
+function charMaterial() {
+  if (!CHAR_MAT) CHAR_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, map: fabricTexture('#ffffff', '40,30,20', 9), roughness: 0.82 });
+  return CHAR_MAT;
+}
+
+// Merge every mesh directly under a bone into a single draw call.
 function mergeChildren(group) {
-  const byMat = new Map();
+  const gs = [];
   for (const c of [...group.children]) {
     if (!c.isMesh) continue;
     c.updateMatrix();
     const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
     g.applyMatrix4(c.matrix);
     for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
-    if (!byMat.has(c.material)) byMat.set(c.material, []);
-    byMat.get(c.material).push(g);
+    const col = c.material.color;
+    const n = g.attributes.position.count;
+    const a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[i * 3] = col.r * 1.08; a[i * 3 + 1] = col.g * 1.08; a[i * 3 + 2] = col.b * 1.08; }
+    g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+    gs.push(g);
     group.remove(c);
   }
-  for (const [mat, gs] of byMat) {
-    const m = new THREE.Mesh(gs.length > 1 ? mergeGeometries(gs) : gs[0], mat);
-    m.castShadow = true; m.receiveShadow = true;
-    group.add(m);
-  }
+  if (!gs.length) return;
+  const m = new THREE.Mesh(gs.length > 1 ? mergeGeometries(gs) : gs[0], charMaterial());
+  m.castShadow = true; m.receiveShadow = true;
+  group.add(m);
 }
 
 const easeOut = (x) => 1 - (1 - x) * (1 - x);

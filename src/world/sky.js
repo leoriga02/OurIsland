@@ -91,7 +91,7 @@ export class Sky {
     // clouds
     this.clouds = [];
     const r = mulberry32(4);
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 13; i++) {
       const mat = new THREE.SpriteMaterial({ map: cloudTexture(1 + (i % 5)), fog: false, depthWrite: false, transparent: true, opacity: 0.95 });
       const s = new THREE.Sprite(mat);
       const a = r() * Math.PI * 2, d = 900 + r() * 700;
