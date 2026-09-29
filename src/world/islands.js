@@ -58,7 +58,7 @@ function buildIsland(seed, cx, cz, R, H) {
       c.lerp(t, smoothstep(0.32, 0.55, slope));
       c.lerp(SAND, 1 - smoothstep(0.7, 1.5, h));
       // trees on gentle vegetated ground
-      if (h > 1.4 && slope < 0.42) for (let q = 0; q < 2; q++) if (rnd() < 0.8) {
+      if (h > 1.4 && slope < 0.42 && rnd() < 0.55) {
         trees.push({ x: cx + x + (rnd() - 0.5) * step, y: h - 0.3, z: cz + z + (rnd() - 0.5) * step, s: 0.8 + rnd() * 0.5, kind: (h < 6 && rnd() < 0.85) || rnd() < 0.3 ? 'palm' : 'tree', r: rnd() * 6.28 });
       }
     }
@@ -93,7 +93,7 @@ export class DistantIslands {
     });
     // low-detail trees: one instanced mesh per kind
     const M = materials();
-    const palm = palmGeometry(33, true), tree = bushGeometry(11, true);
+    const palm = palmGeometry(33, true), tree = bushGeometry(11, true, 9);
     const mk = (geo, mat, list) => {
       const im = new THREE.InstancedMesh(geo, mat, Math.max(1, list.length));
       const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v = new THREE.Vector3(), sc = new THREE.Vector3();
@@ -107,8 +107,9 @@ export class DistantIslands {
       scene.add(im);
       return im;
     };
-    const palms = allTrees.filter((t) => t.kind === 'palm');
-    const jung = allTrees.filter((t) => t.kind === 'tree').map((t) => ({ ...t, s: t.s * 3.2, y: t.y - 0.5 }));
+    // far away: fewer, bigger trees read the same and cost far less
+    const palms = allTrees.filter((t) => t.kind === 'palm' && Math.random() < 0.45).map((t) => ({ ...t, s: t.s * 1.25 }));
+    const jung = allTrees.filter((t) => t.kind === 'tree' && Math.random() < 0.5).map((t) => ({ ...t, s: t.s * 4, y: t.y - 0.6 }));
     mk(palm.trunk, M.palmBark, palms); mk(palm.fronds, M.frond, palms);
     mk(tree, M.bush, jung);
   }

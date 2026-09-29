@@ -237,11 +237,11 @@ export function jungleTreeGeometry(seed, low = false) {
 }
 
 // ---------- small plants ----------
-export function bushGeometry(seed, big = false) {
+export function bushGeometry(seed, big = false, cards = 0) {
   const rnd = mulberry32(seed);
   const cb = newBuf();
   const r = big ? 1.3 : 0.85;
-  leafCards(cb, new THREE.Vector3(0, r * 0.62, 0), new THREE.Vector3(r, r * 0.7, r), big ? 26 : 16, big ? 1.2 : 0.9, rnd, [1, 1, 1], 0.5);
+  leafCards(cb, new THREE.Vector3(0, r * 0.62, 0), new THREE.Vector3(r, r * 0.7, r), cards || (big ? 26 : 16), (big ? 1.2 : 0.9) * (cards ? 1.6 : 1), rnd, [1, 1, 1], 0.5);
   return fromBuf(cb);
 }
 
@@ -269,6 +269,42 @@ export function bananaPlantGeometry(seed) {
         b.nrm.push(0, 1, 0);
         b.uv.push(c / 2, s);
         b.col.push(1, 1, 1);
+      }
+      p.addScaledVector(dir, L / SEG);
+    }
+    for (let i = 0; i < SEG; i++) {
+      const a = base + i * 3;
+      b.idx.push(a, a + 3, a + 1, a + 1, a + 3, a + 4, a + 1, a + 4, a + 2, a + 2, a + 4, a + 5);
+    }
+  }
+  return fromBuf(b);
+}
+
+// Low arching fern: a rosette of narrow fronds (uses the palm-frond texture).
+export function fernGeometry(seed) {
+  const rnd = mulberry32(seed);
+  const b = newBuf();
+  const nL = 9 + Math.floor(rnd() * 4);
+  for (let k = 0; k < nL; k++) {
+    const yaw = (k / nL) * Math.PI * 2 + rnd() * 0.4;
+    const L = 0.9 + rnd() * 0.5, W = 0.42 + rnd() * 0.1;
+    const pitch0 = 0.9 + rnd() * 0.5;
+    const fw = new THREE.Vector3(Math.cos(yaw), 0, Math.sin(yaw));
+    const right = new THREE.Vector3(-Math.sin(yaw), 0, Math.cos(yaw));
+    let p = new THREE.Vector3(0, 0.05, 0);
+    const SEG = 5, base = b.pos.length / 3;
+    for (let i = 0; i <= SEG; i++) {
+      const s = i / SEG;
+      const pitch = pitch0 - s * (1.9 + rnd() * 0.3);
+      const dir = fw.clone().multiplyScalar(Math.cos(pitch)).add(new THREE.Vector3(0, Math.sin(pitch), 0));
+      const w = W * 0.5 * (1 - s * 0.5);
+      for (let c = 0; c < 3; c++) {
+        const pt = p.clone().addScaledVector(right, (c - 1) * w).add(new THREE.Vector3(0, c === 1 ? 0.02 : -0.02, 0));
+        b.pos.push(pt.x, pt.y, pt.z);
+        b.nrm.push(0, 1, 0);
+        b.uv.push(c / 2, s);
+        const sh = 0.55 + 0.45 * s;
+        b.col.push(sh, sh, sh);
       }
       p.addScaledVector(dir, L / SEG);
     }

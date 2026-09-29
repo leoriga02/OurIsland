@@ -42,6 +42,7 @@ export function materials() {
   M.frond = patchFoliage(new THREE.MeshStandardMaterial({ map: palmFrondTexture(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8 }), { wind: 0.035, key: 'frond', mode: 'uv' });
   M.canopy = patchFoliage(new THREE.MeshStandardMaterial({ map: leafClusterTexture(98), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85, vertexColors: true }), { wind: 0.004, key: 'canopy' });
   M.bush = patchFoliage(new THREE.MeshStandardMaterial({ map: leafClusterTexture(104, 'bush'), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85, vertexColors: true }), { wind: 0.03, key: 'bush' });
+  M.fern = patchFoliage(new THREE.MeshStandardMaterial({ map: palmFrondTexture(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8, vertexColors: true }), { wind: 0.05, key: 'fern' });
   M.banana = patchFoliage(new THREE.MeshStandardMaterial({ map: bananaLeafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75 }), { wind: 0.03, key: 'banana' });
   M.grass = patchFoliage(new THREE.MeshStandardMaterial({ map: grassTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9, vertexColors: true }), { wind: 0.25, key: 'grass' });
   M.fiber = patchFoliage(new THREE.MeshStandardMaterial({ map: fiberPlantTexture(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9 }), { wind: 0.08, key: 'fiber' });
