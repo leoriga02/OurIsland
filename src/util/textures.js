@@ -203,6 +203,62 @@ export function detailNoiseTexture() {
   });
 }
 
+// Tiling grass-blade detail (grayscale) for the terrain.
+export function grassDetailTexture() {
+  return cached('grassDetail', () => {
+    const S = 256;
+    const c = canvas(S, S), g = c.getContext('2d');
+    g.fillStyle = 'rgb(200,200,200)'; g.fillRect(0, 0, S, S);
+    const r = mulberry32(17);
+    for (let i = 0; i < 2600; i++) {
+      const x = r() * S, y = r() * S, l = 3 + r() * 7, a = -Math.PI / 2 + (r() - 0.5) * 1.2;
+      const v = Math.floor(120 + r() * 135);
+      g.strokeStyle = `rgba(${v},${v},${v},0.85)`;
+      g.lineWidth = 1 + r() * 1.2;
+      for (const ox of [0, -S, S]) for (const oy of [0, -S, S]) {
+        if (x + ox < -10 || x + ox > S + 10 || y + oy < -10 || y + oy > S + 10) continue;
+        g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l); g.stroke();
+      }
+    }
+    // green channel: large soft blotches (used as macro variation)
+    const img = g.getImageData(0, 0, S, S);
+    const vals = []; const grid = 8;
+    for (let i = 0; i < grid * grid; i++) vals.push(r());
+    const vn = (x, y) => {
+      const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+      const v = (a, b) => vals[((b % grid + grid) % grid) * grid + ((a % grid + grid) % grid)];
+      const sx = xf * xf * (3 - 2 * xf), sy = yf * yf * (3 - 2 * yf);
+      return (v(xi, yi) * (1 - sx) + v(xi + 1, yi) * sx) * (1 - sy) + (v(xi, yi + 1) * (1 - sx) + v(xi + 1, yi + 1) * sx) * sy;
+    };
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) img.data[(y * S + x) * 4 + 1] = Math.floor(vn(x / 32, y / 32) * 255);
+    g.putImageData(img, 0, 0);
+    return tex(c, { repeat: true, srgb: false });
+  });
+}
+
+// Sand grains + faint ripples.
+export function sandDetailTexture() {
+  return cached('sandDetail', () => {
+    const S = 256;
+    const c = canvas(S, S), g = c.getContext('2d');
+    const img = g.createImageData(S, S);
+    const r = mulberry32(23);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const rip = Math.sin((y + Math.sin(x / 19) * 6) / S * Math.PI * 2 * 9) * 0.5 + 0.5;
+      const v = 205 + rip * 22 + (r() - 0.5) * 40;
+      const i = (y * S + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.max(0, Math.min(255, v)); img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    for (let i = 0; i < 260; i++) { // pebbles / shell bits
+      const v = Math.floor(140 + r() * 110);
+      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.beginPath(); g.arc(r() * S, r() * S, 0.6 + r() * 1.4, 0, 7); g.fill();
+    }
+    return tex(c, { repeat: true, srgb: false });
+  });
+}
+
 export function barkTexture(base = [120, 88, 60], key = 'bark') {
   return cached(key, () => {
     const W = 128, H = 256;

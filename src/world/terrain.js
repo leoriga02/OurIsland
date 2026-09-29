@@ -1,7 +1,7 @@
 // Island heightfield: generation, mesh, height queries, water-depth texture & minimap image.
 import * as THREE from 'three';
 import { makeNoise2D, fbm, smoothstep, clamp, lerp } from '../util/noise.js';
-import { detailNoiseTexture } from '../util/textures.js';
+import { grassDetailTexture, sandDetailTexture } from '../util/textures.js';
 
 export const WORLD_SIZE = 560;
 export const GRID = 280;
@@ -173,17 +173,36 @@ export class Terrain {
     const nrm = g.attributes.normal.array;
 
     const c = new THREE.Color(), t = new THREE.Color();
+    const grassW = new Float32Array(N * N);
     for (let k = 0; k < N * N; k++) {
       const x = pos[k * 3], h = pos[k * 3 + 1], z = pos[k * 3 + 2];
       this.colorAt(x, h, z, nrm[k * 3 + 1], c, t);
       col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b;
+      const n = this.noise(x * 0.05, z * 0.05);
+      const sandLine = 1.55 + n * 0.45;
+      const slope = 1 - nrm[k * 3 + 1];
+      grassW[k] = h < 0.05 ? 0 : smoothstep(sandLine, sandLine + 0.9, h) * (1 - smoothstep(0.3, 0.55, slope)) * smoothstep(1.2, 2.6, this._pathDist(x, z));
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aGrass', new THREE.BufferAttribute(grassW, 1));
 
-    const detail = detailNoiseTexture();
     const mat = new THREE.MeshStandardMaterial({
-      vertexColors: true, map: detail, roughness: 0.93, metalness: 0,
+      vertexColors: true, map: sandDetailTexture(), roughness: 0.93, metalness: 0,
     });
+    const grassTex = grassDetailTexture();
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uGrassTex = { value: grassTex };
+      sh.vertexShader = 'attribute float aGrass;\nvarying float vGrass;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvGrass = aGrass;');
+      sh.fragmentShader = 'uniform sampler2D uGrassTex;\nvarying float vGrass;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
+        float sd = texture2D(map, vMapUv * 1.3).r;
+        vec4 gd = texture2D(uGrassTex, vMapUv * 1.6);
+        float macro = texture2D(uGrassTex, vMapUv * 0.09).g;
+        float grassD = gd.r * (0.82 + 0.36 * macro);
+        float detail = mix(sd * (0.92 + 0.16 * macro), grassD, vGrass);
+        diffuseColor.rgb *= detail * 1.12;
+      `);
+    };
+    mat.customProgramCacheKey = () => 'terrain2';
     const mesh = new THREE.Mesh(g, mat);
     mesh.receiveShadow = true;
     mesh.name = 'terrain';
