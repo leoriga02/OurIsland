@@ -507,8 +507,8 @@ export class Game {
     fade.classList.add('on');
     this.player.frozen = true;
     setTimeout(() => {
+      if (this.sky.time > 0.5) this.sky.day++;
       this.sky.time = 0.27;
-      this.sky.day++;
       this.stats.health = clamp(this.stats.health + 35, 0, 100);
       this.stats.food = clamp(this.stats.food - 12, 0, 100);
       this.stats.water = clamp(this.stats.water - 12, 0, 100);

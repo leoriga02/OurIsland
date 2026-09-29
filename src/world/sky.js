@@ -116,7 +116,7 @@ export class Sky {
 
   update(dt, focus) {
     const prev = this.time;
-    this.time = (this.time + dt / this.dayLength) % 1;
+    this.time = (this.time + dt * (this.night > 0.5 ? 1.8 : 1) / this.dayLength) % 1;
     if (this.time < prev) this.day++;
     const t = this.time;
     const ang = (t - 0.25) * Math.PI * 2;

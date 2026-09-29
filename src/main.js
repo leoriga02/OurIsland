@@ -5,13 +5,26 @@ const params = new URLSearchParams(location.search);
 const isMobile = matchMedia('(pointer: coarse)').matches;
 const quality = params.has('low') ? 0 : isMobile ? 1 : 2;
 
+// Filmic grade: ACES + a little vibrance, soft S-curve and warm/cool split toning (free: runs in every material).
+THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars_fragment.replace(
+  'vec3 CustomToneMapping( vec3 color ) { return color; }',
+  `vec3 CustomToneMapping( vec3 color ) {
+    vec3 c = ACESFilmicToneMapping( color );
+    float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
+    c = mix( vec3( l ), c, 1.17 );
+    c = mix( c, c * c * ( 3.0 - 2.0 * c ), 0.2 );
+    c += vec3( 0.02, 0.009, -0.012 ) * smoothstep( 0.35, 0.95, l );
+    c += vec3( -0.012, 0.002, 0.02 ) * ( 1.0 - smoothstep( 0.0, 0.35, l ) );
+    return saturate( c );
+  }`);
+
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality > 0, powerPreference: 'high-performance' });
 let pixelRatio = Math.min(window.devicePixelRatio, quality >= 2 ? 2 : 1.75);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = params.has('aces') ? THREE.ACESFilmicToneMapping : THREE.CustomToneMapping;
 renderer.toneMappingExposure = 0.94;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
