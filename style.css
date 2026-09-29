@@ -269,3 +269,37 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
   #quest .qhint { font-size: 10.5px; }
   .stat .bar { width: 110px; }
 }
+
+/* ---------------- title menu & co-op ---------------- */
+.title-inner { gap: 8px; margin-top: 12vh; }
+#char-pick { display: flex; gap: 10px; margin: 2px 0 4px; }
+.char-card { width: 84px; padding: 4px 4px 6px; border-radius: 12px; background: rgba(12,18,24,0.6); border: 2px solid rgba(255,255,255,0.18); display: flex; flex-direction: column; align-items: center; font-weight: 800; font-size: 12px; color: #fff; }
+.char-card img { width: 72px; height: 72px; }
+.char-card.sel { border-color: var(--gold); box-shadow: 0 0 14px rgba(232,176,74,0.55); background: rgba(40,30,12,0.65); }
+.menu { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.menu-row { display: flex; gap: 8px; }
+.pill.coop { background: linear-gradient(180deg, #2f6f9a, #1d4a6a); border-color: #6fb4e0; font-size: 15px; padding: 9px 20px; }
+.pill.small { font-size: 11px; padding: 5px 12px; opacity: 0.9; }
+.menu-label { font-weight: 800; text-shadow: 0 1px 4px #000; }
+.menu-status { font-size: 13px; min-height: 18px; color: #dfe8ee; text-shadow: 0 1px 3px #000; }
+#join-code { width: 190px; text-align: center; font: 700 30px 'Cinzel', serif; letter-spacing: 8px; padding: 6px 10px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.35); background: rgba(8,14,20,0.75); color: #fff; outline: none; text-transform: uppercase; user-select: text; -webkit-user-select: text; }
+#join-code:focus { border-color: var(--gold); }
+
+#coop-pill { position: absolute; left: 50%; top: calc(42px + var(--safe-t)); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-radius: 16px; background: rgba(12,16,20,0.72); border: 1px solid var(--line); font-size: 12px; font-weight: 800; white-space: nowrap; }
+#coop-pill .cp-dot { width: 9px; height: 9px; border-radius: 50%; background: #e0a030; box-shadow: 0 0 6px currentColor; }
+#coop-pill.on .cp-dot { background: #5fd86a; }
+#coop-pill.off .cp-dot { background: #e0453a; }
+#coop-pill.on .cp-invite { display: none; }
+#coop-pill .cp-code { color: var(--gold-2); letter-spacing: 2px; }
+#partner-card { position: absolute; left: calc(14px + var(--safe-l)); top: calc(118px + var(--safe-t)); width: 150px; padding: 4px 8px 6px; border-radius: 8px; background: rgba(12,16,20,0.6); border-left: 3px solid #ffd27a; font-size: 11px; font-weight: 800; pointer-events: none; }
+#partner-card .bar { height: 6px; border-radius: 3px; background: rgba(0,0,0,0.5); overflow: hidden; margin-top: 3px; }
+#partner-card .bar i { display: block; height: 100%; background: linear-gradient(180deg, #ff6a5a, #c8281e); }
+#partner-card .pc-state { font-size: 10px; color: var(--muted); margin-top: 2px; }
+#partner-card:not(.hidden) ~ #quest { top: calc(178px + var(--safe-t)); }
+@media (max-height: 430px) {
+  #partner-card { top: calc(104px + var(--safe-t)); }
+  #partner-card:not(.hidden) ~ #quest { top: calc(160px + var(--safe-t)); }
+  #char-pick .char-card { width: 70px; } .char-card img { width: 56px; height: 56px; }
+  .title-inner { margin-top: 4vh; gap: 6px; }
+  .logo span:last-child { font-size: 40px; }
+}

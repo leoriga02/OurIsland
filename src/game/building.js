@@ -278,7 +278,25 @@ export class Building {
   }
 
   // Places a piece described by a target (from computeTarget or a save file)
+  // Returns null when that spot is already occupied (e.g. the same piece arriving twice over the network).
+  exists(type, t) {
+    if (type === 'foundation') return !!this.cells.get(this.key(t.i, t.j))?.foundation;
+    if (type === 'roof') return !!this.cells.get(this.key(t.i, t.j))?.roof;
+    if (type === 'campfire' || type === 'bed') return this.placeables.some((p) => Math.hypot(p.x - t.x, p.z - t.z) < 0.5);
+    return this.edges.has(t.i + ',' + t.j + ',' + t.d);
+  }
+
+  // Adds everything from a saved/remote building layout that isn't built here yet.
+  merge(data) {
+    if (!data) return;
+    for (const c of data.cells || []) if (!this.exists('foundation', c)) this.placePiece('foundation', { i: c.i, j: c.j, level: c.level }, false);
+    for (const c of data.cells || []) if (c.roof && !this.exists('roof', c)) this.placePiece('roof', { i: c.i, j: c.j, rot: c.roofRot }, false);
+    for (const e of data.edges || []) if (!this.exists(e.type, e)) this.placePiece(e.type, e, false);
+    for (const p of data.placeables || []) if (!this.exists(p.type, p)) this.placePiece(p.type, p, false);
+  }
+
   placePiece(type, t, animate = true) {
+    if (this.exists(type, t)) return null;
     let obj;
     if (type === 'foundation') {
       const k = this.key(t.i, t.j);

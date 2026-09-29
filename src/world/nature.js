@@ -162,6 +162,7 @@ export class Nature {
   }
   addResource(res) {
     res.alive = true;
+    res.id = this.all.length;
     this.resources.add(res);
     this.all.push(res);
     return res;
@@ -604,6 +605,19 @@ export class Nature {
     if (res.collider) res.collider.active = false;
     res.pool.show(res.idx, false);
     res.respawnAt = respawnDelay ? time + respawnDelay : 0;
+  }
+
+  // Remove without animation (loading a save / joining a partner's world). Felled trees leave a stump.
+  removeInstant(res, respawnDelay, time) {
+    this.remove(res, respawnDelay, time);
+    if ((res.kind === 'palm' || res.kind === 'tree') && !res.stump) {
+      const s = res.scale || 1;
+      const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.22 * s, 0.3 * s, 0.35, 9), this.M.bark);
+      stump.position.set(res.x, res.y + 0.17, res.z);
+      stump.castShadow = true;
+      this.scene.add(stump);
+      res.stump = stump;
+    }
   }
 
   restoreStump(res) {
