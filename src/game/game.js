@@ -92,7 +92,7 @@ export class Game {
 
   pieceIcon(id) {
     if (!this.pieceIcons[id]) {
-      const obj = pieceObject(id);
+      const obj = pieceObject(id === 'foundation' ? 'foundation_icon' : id);
       this.pieceIcons[id] = this.icons.render('piece:' + id, obj, { rx: -0.45, ry: 0.6, pad: 1.05 });
     }
     return this.pieceIcons[id];

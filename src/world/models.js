@@ -96,11 +96,11 @@ const newBuf = () => ({ pos: [], nrm: [], uv: [], col: [], idx: [] });
 const fromBuf = (b) => build(b.pos, b.nrm, b.uv, b.col, b.idx);
 
 // ---------- palm ----------
-export function palmGeometry(seed) {
+export function palmGeometry(seed, low = false) {
   const rnd = mulberry32(seed);
   const H = 5.2 + rnd() * 3.4;
   const bend = 0.12 + rnd() * 0.2;
-  const S = 16, R = 9;
+  const S = low ? 6 : 14, R = low ? 5 : 8;
   const pos = [], nrm = [], uv = [], col = [], idx = [];
   const center = (t) => new THREE.Vector3(bend * H * t * t, H * t, 0);
   for (let i = 0; i <= S; i++) {
@@ -129,16 +129,17 @@ export function palmGeometry(seed) {
   const top = center(1);
   const parts = [trunk];
   // crown bulge + coconuts
-  const bulge = new THREE.SphereGeometry(0.3, 10, 8);
+  const bulge = new THREE.SphereGeometry(0.3, low ? 5 : 8, low ? 4 : 6);
   bulge.scale(1, 0.8, 1); bulge.translate(top.x, top.y - 0.05, top.z);
   setColor(bulge, 0.45, 0.4, 0.22);
   parts.push(bulge);
   const nCoco = 2 + Math.floor(rnd() * 4);
   for (let k = 0; k < nCoco; k++) {
-    const a = rnd() * Math.PI * 2;
-    const s = new THREE.SphereGeometry(0.15, 10, 8);
-    s.translate(top.x + Math.cos(a) * 0.24, top.y - 0.28 - rnd() * 0.1, top.z + Math.sin(a) * 0.24);
-    if (rnd() < 0.5) setColor(s, 0.42, 0.5, 0.16); else setColor(s, 0.38, 0.24, 0.12);
+    const a = rnd() * Math.PI * 2, dy = rnd() * 0.1, green = rnd() < 0.5;
+    if (low) continue;
+    const s = new THREE.SphereGeometry(0.15, 7, 5);
+    s.translate(top.x + Math.cos(a) * 0.24, top.y - 0.28 - dy, top.z + Math.sin(a) * 0.24);
+    if (green) setColor(s, 0.42, 0.5, 0.16); else setColor(s, 0.38, 0.24, 0.12);
     parts.push(s);
   }
   const trunkGeo = merge(parts);
@@ -152,12 +153,13 @@ export function palmGeometry(seed) {
     const L = 3.3 + rnd() * 1.2, W = 1.55 + rnd() * 0.3;
     const fw = new THREE.Vector3(Math.cos(yaw), 0, Math.sin(yaw));
     const right = new THREE.Vector3(-Math.sin(yaw), 0, Math.cos(yaw));
-    const SEG = 9;
+    const SEG = low ? 4 : 8;
+    const curl = 1.5 + rnd() * 0.15;
     let p = top.clone().addScaledVector(fw, 0.1);
     const base = fb.pos.length / 3;
     for (let i = 0; i <= SEG; i++) {
       const s = i / SEG;
-      const pitch = pitch0 - s * (1.5 + rnd() * 0.15);
+      const pitch = pitch0 - s * curl;
       const dir = fw.clone().multiplyScalar(Math.cos(pitch)).add(new THREE.Vector3(0, Math.sin(pitch), 0));
       const w = W * (1 - 0.3 * s) * 0.5;
       const droop = w * 0.45;
@@ -188,11 +190,11 @@ export function palmGeometry(seed) {
 }
 
 // ---------- broadleaf jungle tree ----------
-export function jungleTreeGeometry(seed) {
+export function jungleTreeGeometry(seed, low = false) {
   const rnd = mulberry32(seed);
   const H = 7 + rnd() * 5;
   const parts = [];
-  const trunk = new THREE.CylinderGeometry(0.2, 0.42, H, 10, 8);
+  const trunk = new THREE.CylinderGeometry(0.2, 0.42, H, low ? 5 : 9, low ? 3 : 7);
   trunk.translate(0, H / 2, 0);
   const p = trunk.attributes.position;
   const lean = (rnd() - 0.5) * 0.12;
@@ -214,7 +216,7 @@ export function jungleTreeGeometry(seed) {
     const a = (b / nb) * Math.PI * 2 + rnd();
     const bl = 2 + rnd() * 1.5;
     const by = H * (0.6 + rnd() * 0.25);
-    const br = new THREE.CylinderGeometry(0.06, 0.14, bl, 6, 1);
+    const br = new THREE.CylinderGeometry(0.06, 0.14, bl, low ? 4 : 6, 1);
     br.translate(0, bl / 2, 0);
     br.rotateZ(-0.9 - rnd() * 0.3);
     br.rotateY(a);
@@ -226,10 +228,11 @@ export function jungleTreeGeometry(seed) {
   clumps.push(new THREE.Vector3(topX, H + 0.3, 0));
   const trunkGeo = merge(parts);
   const cb = newBuf();
-  for (const c of clumps) {
+  clumps.forEach((c, k) => {
     const r = 1.9 + rnd() * 0.9;
-    leafCards(cb, c, new THREE.Vector3(r, r * 0.62, r), 30, 1.9, rnd, [0.95, 1, 0.9]);
-  }
+    const cr = mulberry32(seed * 31 + k);
+    leafCards(cb, c, new THREE.Vector3(r, r * 0.62, r), low ? 11 : 28, low ? 2.7 : 1.9, cr, [0.95, 1, 0.9]);
+  });
   return { trunk: trunkGeo, canopy: fromBuf(cb), height: H + 2 };
 }
 
@@ -301,7 +304,7 @@ export function flowerGeometry() {
 }
 
 // ---------- rocks ----------
-export function boulderGeometry(seed, { detail = 22, rough = 0.28, flat = 0.35, moss = 0.6, tint = [0.55, 0.51, 0.46] } = {}) {
+export function boulderGeometry(seed, { detail = 16, rough = 0.28, flat = 0.35, moss = 0.6, tint = [0.55, 0.51, 0.46] } = {}) {
   const rnd = mulberry32(seed);
   let g = new THREE.SphereGeometry(1, detail, Math.round(detail * 0.7));
   g.deleteAttribute('uv'); g.deleteAttribute('normal');

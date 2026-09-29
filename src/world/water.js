@@ -92,7 +92,7 @@ const frag = /* glsl */`
     float foam = clamp(max(shore, band * 0.8), 0.0, 1.0) * (1.0 - uPond * 0.6);
     col = mix(col, vec3(0.96, 0.98, 1.0) * (0.75 + 0.25 * diff), foam);
 
-    float alpha = mix(0.5, 0.95, smoothstep(0.0, 3.0, depth));
+    float alpha = mix(0.66, 0.96, smoothstep(0.0, 2.5, depth));
     alpha = max(alpha, fres * 0.9);
     alpha = max(alpha, foam);
     alpha *= smoothstep(-0.05, 0.08, depth);
@@ -126,7 +126,7 @@ export function createWaterMaterial(heightTex, { level = 0, pond = false } = {})
         uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
         uZenith: { value: new THREE.Color(0x2f7fd8) },
         uHorizon: { value: new THREE.Color(0xa9d8f0) },
-        uShallow: { value: pond ? lin(0x3fb7a8) : lin(0x2fe0d2) },
+        uShallow: { value: pond ? lin(0x3fb7a8) : lin(0x22d6cc) },
         uMid: { value: pond ? lin(0x1d7f7a) : lin(0x0e9cc0) },
         uDeep: { value: pond ? lin(0x145a5a) : lin(0x0a4d93) },
       },

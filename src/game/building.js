@@ -82,7 +82,7 @@ function wallModel(kind) {
   return bake(parts);
 }
 
-function foundationModel() {
+function foundationModel(postLen = 5) {
   const M = materials();
   const parts = [];
   const deck = new THREE.Mesh(new THREE.BoxGeometry(G, FOUND_T, G), M.planks);
@@ -94,7 +94,7 @@ function foundationModel() {
   }
   log(parts, M.woodDark, 0.1, G, V(0, -FOUND_T - 0.1, 0), V(0, 0, Math.PI / 2));
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    log(parts, M.wood, 0.17, 5, V(sx * (G / 2 - 0.1), -2.5, sz * (G / 2 - 0.1)));
+    log(parts, M.wood, 0.17, postLen, V(sx * (G / 2 - 0.1), -postLen / 2, sz * (G / 2 - 0.1)));
     band(parts, M.rope, 0.19, V(sx * (G / 2 - 0.1), -0.3, sz * (G / 2 - 0.1)));
   }
   return bake(parts);
@@ -135,6 +135,7 @@ export function pieceModel(type) {
   if (modelCache[type]) return modelCache[type];
   let m;
   if (type === 'foundation') m = foundationModel();
+  else if (type === 'foundation_icon') m = foundationModel(0.7);
   else if (type === 'roof') m = roofModel();
   else if (type === 'campfire') m = [{ geo: campfireGeo(1), mat: itemMaterial }];
   else if (type === 'bed') m = [{ geo: bedGeo(), mat: itemMaterial }];

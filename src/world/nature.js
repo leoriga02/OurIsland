@@ -11,47 +11,97 @@ import { mulberry32, smoothstep, clamp } from '../util/noise.js';
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _e = new THREE.Euler();
 
+// Instanced pool. In "managed" mode instances are re-packed every so often by distance:
+// near instances go to a shadow-casting mesh (optionally high detail), far ones to a cheap mesh or are culled.
 export class Pool {
-  constructor(scene, parts, capacity, { shadow = true, receive = true } = {}) {
+  constructor(scene, parts, capacity, { shadow = true, receive = true, lod = null, near = 60, far = Infinity } = {}) {
     this.parts = parts;
-    this.meshes = parts.map(({ geo, mat }) => {
+    this.capacity = capacity;
+    this.managed = shadow || !!lod || far < Infinity;
+    this.nearDist = near; this.farDist = far;
+    const mk = (ps, cast) => ps.map(({ geo, mat }) => {
       const m = new THREE.InstancedMesh(geo, mat, capacity);
       m.count = 0;
-      m.castShadow = shadow; m.receiveShadow = receive;
+      m.castShadow = cast; m.receiveShadow = receive;
+      m.frustumCulled = true;
       scene.add(m);
       return m;
     });
+    this.meshes = mk(parts, shadow);
+    this.farMeshes = this.managed ? mk(lod || parts, false) : [];
     this.count = 0;
-    this.capacity = capacity;
     this.matrices = [];
+    this.colors = [];
+    this.hidden = [];
+    this.override = new Map();
+    this.dirty = true;
+    this.lastCam = new THREE.Vector3(1e9, 0, 0);
   }
   add(matrix, color) {
     if (this.count >= this.capacity) return -1;
     const i = this.count++;
-    for (const m of this.meshes) {
-      m.setMatrixAt(i, matrix);
-      if (color) m.setColorAt(i, color);
-      m.count = this.count;
-    }
     this.matrices[i] = matrix.clone();
+    this.colors[i] = color ? color.clone() : null;
+    this.hidden[i] = false;
+    if (!this.managed) {
+      for (const m of this.meshes) { m.setMatrixAt(i, matrix); if (color) m.setColorAt(i, color); m.count = this.count; }
+    }
+    this.dirty = true;
     return i;
   }
-  set(i, matrix) { for (const m of this.meshes) { m.setMatrixAt(i, matrix); m.instanceMatrix.needsUpdate = true; } }
-  show(i, v) { this.set(i, v ? this.matrices[i] : ZERO); }
+  set(i, matrix) {
+    if (!this.managed) { for (const m of this.meshes) { m.setMatrixAt(i, matrix); m.instanceMatrix.needsUpdate = true; } return; }
+    this.override.set(i, matrix.clone());
+    this.dirty = true;
+  }
+  show(i, v) {
+    this.override.delete(i);
+    this.hidden[i] = !v;
+    if (!this.managed) this.set(i, v ? this.matrices[i] : ZERO);
+    this.dirty = true;
+  }
   scaled(i, s) {
+    this.hidden[i] = false;
     _m.copy(this.matrices[i]);
     const e = _m.elements;
-    // scale around the instance origin (keep translation)
     for (let k = 0; k < 12; k++) if (k % 4 !== 3) e[k] *= s;
-    _m.elements[12] = this.matrices[i].elements[12]; _m.elements[13] = this.matrices[i].elements[13]; _m.elements[14] = this.matrices[i].elements[14];
     this.set(i, _m);
+    if (s >= 1) this.override.delete(i);
   }
   finalize() {
+    if (this.managed) { this.dirty = true; return; }
     for (const m of this.meshes) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
       m.computeBoundingSphere();
-      m.computeBoundingBox?.();
+    }
+  }
+  update(cam) {
+    if (!this.managed) return;
+    if (!this.dirty && cam.distanceToSquared(this.lastCam) < 16) return;
+    this.dirty = false;
+    this.lastCam.copy(cam);
+    const n2 = this.nearDist * this.nearDist, f2 = this.farDist * this.farDist;
+    let ni = 0, fi = 0;
+    for (let i = 0; i < this.count; i++) {
+      if (this.hidden[i]) continue;
+      const mat = this.override.get(i) || this.matrices[i];
+      const e = mat.elements;
+      const dx = e[12] - cam.x, dz = e[14] - cam.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > f2) continue;
+      const list = d2 < n2 ? this.meshes : this.farMeshes;
+      const k = d2 < n2 ? ni++ : fi++;
+      for (const m of list) { m.setMatrixAt(k, mat); if (this.colors[i]) m.setColorAt(k, this.colors[i]); }
+    }
+    for (const [list, n] of [[this.meshes, ni], [this.farMeshes, fi]]) {
+      for (const m of list) {
+        m.count = n;
+        m.visible = n > 0;
+        m.instanceMatrix.needsUpdate = true;
+        if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        m.computeBoundingSphere();
+      }
     }
   }
 }
@@ -142,7 +192,7 @@ export class Nature {
     const pondOk = (x, z, pad) => !T.isInPond(x, z, pad);
     this.pickupPools = {};
     for (const id of ['stick', 'stone', 'coconut', 'wood']) {
-      this.pickupPools[id] = new Pool(scene, [{ geo: itemGeometry(id), mat: itemMaterial }], 260);
+      this.pickupPools[id] = new Pool(scene, [{ geo: itemGeometry(id), mat: itemMaterial }], 260, { near: 30, far: 90 });
     }
 
     // ---- spires (karst pillars) ----
@@ -220,8 +270,7 @@ export class Nature {
 
     // ---- boulders ----
     const bVariants = [0, 1, 2, 3].map((k) => boulderGeometry(500 + k, { rough: 0.3, flat: 0.3, moss: 0.7, tint: [0.56, 0.5, 0.44] }));
-    const bigRocks = new Pool(scene, bVariants.map((g) => ({ geo: g, mat: M.rock })).slice(0, 1), 1);
-    this.boulderPools = bVariants.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 160));
+    this.boulderPools = bVariants.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 160, { near: 70 }));
     const placeBoulder = (x, z, s, h, collide = true) => {
       const y = T.heightAt(x, z);
       _e.set((R() - 0.5) * 0.3, R() * 6, (R() - 0.5) * 0.3); _q.setFromEuler(_e);
@@ -253,11 +302,10 @@ export class Nature {
     // outcrops on steep slopes break up smooth cliff faces
     this.sample(({ x, z, h, slope }) => slope > 0.42 && h > 3 && !T.isInPond(x, z, 3) && this.free(x, z, 2.5), 8000)
       .slice(0, 110).forEach(({ x, z }) => { const s = 2.2 + R() * 3.2; placeBoulder(x, z, s, s * (0.7 + R() * 0.7)); });
-    bigRocks.meshes.forEach((m) => scene.remove(m));
 
     // ---- mineable stone nodes ----
     const nodeGeos = [0, 1, 2].map((k) => boulderGeometry(700 + k, { rough: 0.35, flat: 0.25, moss: 0.25, tint: [0.66, 0.64, 0.62] }));
-    this.nodePools = nodeGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 40));
+    this.nodePools = nodeGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 40, { near: 50 }));
     const nodeSpots = this.sample(({ x, z, h, slope, pd, s }) => h > 1.8 && s > 10 && pd > 3 && pondOk(x, z, 4) && slope < 0.4 && this.free(x, z, 3), 1500).slice(0, 38);
     // guarantee a couple near spawn path
     const sp = T.spawn;
@@ -275,9 +323,10 @@ export class Nature {
     });
 
     // ---- palms ----
-    const palmVariants = [0, 1, 2, 3, 4].map((k) => palmGeometry(20 + k * 7));
+    const palmVariants = [0, 1, 2, 3].map((k) => palmGeometry(20 + k * 7));
+    const palmLow = [0, 1, 2, 3].map((k) => palmGeometry(20 + k * 7, true));
     this.palmVariants = palmVariants;
-    this.palmPools = palmVariants.map((v) => new Pool(scene, [{ geo: v.trunk, mat: M.palmBark }, { geo: v.fronds, mat: M.frond }], 90));
+    this.palmPools = palmVariants.map((v, k) => new Pool(scene, [{ geo: v.trunk, mat: M.palmBark }, { geo: v.fronds, mat: M.frond }], 110, { near: 55, lod: [{ geo: palmLow[k].trunk, mat: M.palmBark }, { geo: palmLow[k].fronds, mat: M.frond }] }));
     const palmSpots = this.sample(({ x, z, h, s, slope, pd, rnd }) => {
       if (h < 0.9 || h > 14 || slope > 0.32 || pd < 3 || !pondOk(x, z, 3)) return false;
       if (this.nearSpawn(x, z, 7)) return false;
@@ -309,8 +358,9 @@ export class Nature {
 
     // ---- jungle trees ----
     const jVariants = [0, 1, 2].map((k) => jungleTreeGeometry(60 + k * 13));
+    const jLow = [0, 1, 2].map((k) => jungleTreeGeometry(60 + k * 13, true));
     this.jungleVariants = jVariants;
-    this.junglePools = jVariants.map((v) => new Pool(scene, [{ geo: v.trunk, mat: M.bark }, { geo: v.canopy, mat: M.canopy }], 110));
+    this.junglePools = jVariants.map((v, k) => new Pool(scene, [{ geo: v.trunk, mat: M.bark }, { geo: v.canopy, mat: M.canopy }], 130, { near: 55, lod: [{ geo: jLow[k].trunk, mat: M.bark }, { geo: jLow[k].canopy, mat: M.canopy }] }));
     const jSpots = this.sample(({ x, z, h, s, slope, pd, rnd }) => h > 3 && s > 35 && slope < 0.58 && pd > 3.5 && pondOk(x, z, 5) && rnd() < 0.7 && this.free(x, z, 4), 5000);
     jSpots.slice(0, 330).forEach(({ x, z }) => {
       if (!this.free(x, z, 3.5)) return;
@@ -328,8 +378,8 @@ export class Nature {
 
     // ---- bushes, bananas, flowers (decor) ----
     const bushGeos = [bushGeometry(1), bushGeometry(2, true), bushGeometry(3)];
-    const bushPools = bushGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.bush }], 400, { shadow: this.quality > 0 }));
-    const flowerPool = new Pool(scene, [{ geo: flowerGeometry(), mat: M.flower }], 800, { shadow: false });
+    const bushPools = bushGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.bush }], 400, { shadow: this.quality > 0, near: 35, far: 150 }));
+    const flowerPool = new Pool(scene, [{ geo: flowerGeometry(), mat: M.flower }], 800, { shadow: false, far: 70 });
     const tint = new THREE.Color();
     this.sample(({ x, z, h, slope, pd, rnd }) => h > 1.2 && slope < 0.5 && pd > 1.8 && pondOk(x, z, 1) && rnd() < 0.85, 9000)
       .slice(0, 900).forEach(({ x, z }) => {
@@ -352,7 +402,7 @@ export class Nature {
         }
       });
     const banGeos = [bananaPlantGeometry(1), bananaPlantGeometry(2)];
-    const banPools = banGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.banana }], 250, { shadow: this.quality > 0 }));
+    const banPools = banGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.banana }], 250, { shadow: this.quality > 0, near: 35, far: 140 }));
     this.sample(({ x, z, h, s, slope, pd, rnd }) => h > 1.6 && slope < 0.4 && pd > 2 && pondOk(x, z, 0) && (s > 30 || rnd() < 0.3), 5000)
       .slice(0, 420).forEach(({ x, z }) => {
         if (this.nearSpawn(x, z, 4)) return;
@@ -364,7 +414,7 @@ export class Nature {
       });
 
     // ---- fiber plants (harvestable) ----
-    const fiberPool = new Pool(scene, [{ geo: fiberPlantGeometry(), mat: M.fiber }], 200, { shadow: false });
+    const fiberPool = new Pool(scene, [{ geo: fiberPlantGeometry(), mat: M.fiber }], 200, { shadow: false, far: 110 });
     const fSpots = this.sample(({ x, z, h, slope, pd }) => h > 1.4 && slope < 0.35 && pd > 2 && pondOk(x, z, 1) && this.free(x, z, 1), 3000).slice(0, 120);
     const fStarter = [[sp.x + 5, sp.z - 12], [sp.x - 6, sp.z - 16], [sp.x + 2, sp.z - 20], [sp.x - 11, sp.z - 9]];
     fStarter.forEach(([x, z]) => fSpots.unshift({ x, z }));
@@ -379,7 +429,7 @@ export class Nature {
 
     // ---- berry bushes ----
     const bbGeo = bushGeometry(9, true);
-    const berryPool = new Pool(scene, [{ geo: bbGeo, mat: M.bush }], 60);
+    const berryPool = new Pool(scene, [{ geo: bbGeo, mat: M.bush }], 60, { near: 40, far: 150 });
     const berryParts = [];
     const br = mulberry32(77);
     for (let i = 0; i < 26; i++) {
@@ -389,7 +439,7 @@ export class Nature {
       setColor(s, 0.75, 0.05, 0.1);
       berryParts.push(s);
     }
-    const berryFruitPool = new Pool(scene, [{ geo: merge(berryParts), mat: itemMaterial }], 60, { shadow: false });
+    const berryFruitPool = new Pool(scene, [{ geo: merge(berryParts), mat: itemMaterial }], 60, { shadow: false, far: 70 });
     const bSpots = this.sample(({ x, z, h, s, slope, pd }) => h > 2 && s > 15 && slope < 0.35 && pd > 3 && pondOk(x, z, 3) && this.free(x, z, 2), 3000).slice(0, 36);
     bSpots.unshift({ x: sp.x - 12, z: sp.z - 34 });
     bSpots.forEach(({ x, z }) => {
@@ -419,7 +469,8 @@ export class Nature {
     // ---- grass (chunked) ----
     this._grass();
 
-    for (const p of [...this.boulderPools, ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)]) p.finalize();
+    this.pools = [...this.boulderPools, ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
+    for (const p of this.pools) p.finalize();
     this.cliffRocks = cliffRocks;
   }
 
@@ -482,6 +533,7 @@ export class Nature {
   query(x, z, r) { return this.resources.query(x, z, r); }
 
   update(dt, camPos, time) {
+    for (const p of this.pools) p.update(camPos);
     // grass distance culling
     const far = this.quality > 0 ? 85 : 60;
     for (const g of this.grassChunks) {

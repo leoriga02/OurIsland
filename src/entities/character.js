@@ -1,6 +1,7 @@
 // Procedural stylized-realistic castaway: model hierarchy + procedural animation.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, lerp, clamp } from '../util/noise.js';
 
 function fabricTexture(base, speck, seed) {
@@ -28,8 +29,8 @@ function fabricTexture(base, speck, seed) {
 }
 
 const mats = () => ({
-  skin: new THREE.MeshStandardMaterial({ color: 0xc58660, roughness: 0.62 }),
-  stubble: new THREE.MeshStandardMaterial({ color: 0x8f6448, roughness: 0.8 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0xb4744c, roughness: 0.6 }),
+  stubble: new THREE.MeshStandardMaterial({ color: 0x80563c, roughness: 0.8 }),
   shirt: new THREE.MeshStandardMaterial({ map: fabricTexture('#cdb994', '90,62,38', 1), roughness: 0.95 }),
   shorts: new THREE.MeshStandardMaterial({ map: fabricTexture('#534a3c', '30,24,18', 2), roughness: 0.95 }),
   leather: new THREE.MeshStandardMaterial({ map: fabricTexture('#6a4428', '30,18,8', 3), roughness: 0.75 }),
@@ -121,12 +122,15 @@ export class Character {
     hairCap.scale.set(0.98, 1.0, 1.06); hairCap.rotation.x = -0.25;
     const back = mesh(sph(0.108, 14, 10), M.hair, 0, 0.09, -0.03, head); back.scale.set(0.97, 0.9, 0.92);
     const hr = mulberry32(3);
-    for (let i = 0; i < 16; i++) {
-      const a = hr() * Math.PI * 2, e = 0.35 + hr() * 0.9;
-      const t = mesh(sph(0.035 + hr() * 0.02, 8, 6), M.hair, Math.cos(a) * Math.cos(e) * 0.1, 0.13 + Math.sin(e) * 0.09, Math.sin(a) * Math.cos(e) * 0.1 - 0.01, head);
-      t.scale.set(1, 0.65, 1.3); t.rotation.set(hr(), hr(), hr());
+    for (let i = 0; i < 22; i++) {
+      const a = hr() * Math.PI * 2, e = 0.15 + hr() * 1.1;
+      const d = new THREE.Vector3(Math.cos(a) * Math.cos(e), Math.sin(e), Math.sin(a) * Math.cos(e));
+      if (d.z > 0.45 && e < 0.9) continue; // keep the face clear
+      const t = mesh(sph(0.032 + hr() * 0.016, 7, 5), M.hair, d.x * 0.108, 0.115 + d.y * 0.1, d.z * 0.108 - 0.012, head);
+      t.lookAt(t.position.clone().add(d).add(head.position));
+      t.scale.set(1.25, 1.0, 0.45);
     }
-    const fringe = mesh(sph(0.05, 8, 6), M.hair, 0.03, 0.19, 0.085, head); fringe.scale.set(1.5, 0.5, 0.8); fringe.rotation.z = 0.3;
+    const fringe = mesh(sph(0.05, 8, 6), M.hair, 0.025, 0.185, 0.075, head); fringe.scale.set(1.5, 0.45, 0.75); fringe.rotation.z = 0.35;
 
     // arms
     this.arms = [];
@@ -165,6 +169,10 @@ export class Character {
       this.legs.push({ hip, knee, foot, s });
     }
 
+    // merge static meshes per bone & material to keep draw calls low
+    const groups = [];
+    this.root.traverse((o) => { if (o.isGroup || o === this.root) groups.push(o); });
+    for (const g of groups) mergeChildren(g);
     this.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
 
     // animation state
@@ -298,6 +306,25 @@ export class Character {
       }
       if (A.t >= A.dur) this.action = null;
     }
+  }
+}
+
+function mergeChildren(group) {
+  const byMat = new Map();
+  for (const c of [...group.children]) {
+    if (!c.isMesh) continue;
+    c.updateMatrix();
+    const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+    g.applyMatrix4(c.matrix);
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+    if (!byMat.has(c.material)) byMat.set(c.material, []);
+    byMat.get(c.material).push(g);
+    group.remove(c);
+  }
+  for (const [mat, gs] of byMat) {
+    const m = new THREE.Mesh(gs.length > 1 ? mergeGeometries(gs) : gs[0], mat);
+    m.castShadow = true; m.receiveShadow = true;
+    group.add(m);
   }
 }
 

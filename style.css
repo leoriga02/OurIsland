@@ -125,13 +125,13 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
 #joy-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.75), rgba(200,200,200,0.35)); transform: translate(-50%, -50%); }
 
 /* build bar */
-#build-bar { position: absolute; left: 50%; bottom: calc(76px + var(--safe-b)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+#build-bar { position: absolute; left: 50%; bottom: calc(8px + var(--safe-b)); transform: translateX(-50%); display: flex; flex-direction: row; align-items: stretch; gap: 6px; }
 #build-pieces { display: flex; gap: 6px; padding: 6px; background: rgba(14,17,20,0.7); border-radius: 12px; border: 1px solid var(--line); }
 .bpiece { width: 62px; height: 70px; border-radius: 8px; background: linear-gradient(180deg, rgba(48,54,60,0.85), rgba(26,30,34,0.9)); border: 1.5px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 800; }
 .bpiece img { width: 46px; height: 46px; }
 .bpiece.sel { border-color: var(--gold); box-shadow: 0 0 10px rgba(232,176,74,0.5); }
 .bpiece.no { opacity: 0.45; }
-#build-ctrls { display: flex; gap: 8px; }
+#build-ctrls { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
 .pill { padding: 8px 16px; border-radius: 20px; background: var(--panel-2); border: 1px solid rgba(255,255,255,0.18); font-weight: 800; font-size: 13px; }
 .pill.primary { background: linear-gradient(180deg, #4fae58, #2f7d38); border-color: #6fcf78; }
 .pill.big { font-size: 18px; padding: 12px 34px; font-family: 'Cinzel', serif; letter-spacing: 1px; }
@@ -205,7 +205,6 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
   .box h2 { font-size: 16px; margin-bottom: 6px; }
   #craft-detail .big { width: 80px; height: 80px; }
   .cost { width: 50px; height: 54px; } .cost img { width: 32px; height: 32px; }
-  #build-bar { bottom: calc(64px + var(--safe-b)); }
   .bpiece { width: 54px; height: 62px; } .bpiece img { width: 40px; height: 40px; }
   .logo span:last-child { font-size: 48px; }
   .title-inner { margin-top: 10vh; }

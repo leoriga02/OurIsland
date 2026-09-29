@@ -48,7 +48,6 @@ export class UI {
     press($('btn-build'), () => g.toggleBuild());
     press($('btn-bag'), () => this.openPanel('inv'));
     press($('bb-rotate'), () => g.building.rotate());
-    press($('bb-place'), () => g.tryPlace());
     press($('bb-cancel'), () => g.toggleBuild(false));
     document.querySelectorAll('#tabs .tab[data-tab]').forEach((b) => b.addEventListener('click', () => this.openPanel(b.dataset.tab)));
     $('panel-close').addEventListener('click', () => this.closePanel());
