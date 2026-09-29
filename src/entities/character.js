@@ -118,17 +118,17 @@ export class Character {
       const ear = mesh(sph(0.025, 8, 6), M.skin, s * 0.1, 0.1, 0, head); ear.scale.set(0.45, 1, 0.8);
     }
     // messy hair
-    const hairCap = mesh(new THREE.SphereGeometry(0.118, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), M.hair, 0, 0.12, -0.008, head);
-    hairCap.scale.set(0.98, 1.0, 1.06); hairCap.rotation.x = -0.25;
+    const hairCap = mesh(new THREE.SphereGeometry(0.122, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), M.hair, 0, 0.118, -0.01, head);
+    hairCap.scale.set(1.0, 1.02, 1.08); hairCap.rotation.x = -0.28;
     const back = mesh(sph(0.108, 14, 10), M.hair, 0, 0.09, -0.03, head); back.scale.set(0.97, 0.9, 0.92);
     const hr = mulberry32(3);
-    for (let i = 0; i < 22; i++) {
-      const a = hr() * Math.PI * 2, e = 0.15 + hr() * 1.1;
+    for (let i = 0; i < 26; i++) {
+      const a = hr() * Math.PI * 2, e = 0.2 + hr() * 1.2;
       const d = new THREE.Vector3(Math.cos(a) * Math.cos(e), Math.sin(e), Math.sin(a) * Math.cos(e));
-      if (d.z > 0.45 && e < 0.9) continue; // keep the face clear
-      const t = mesh(sph(0.032 + hr() * 0.016, 7, 5), M.hair, d.x * 0.108, 0.115 + d.y * 0.1, d.z * 0.108 - 0.012, head);
-      t.lookAt(t.position.clone().add(d).add(head.position));
-      t.scale.set(1.25, 1.0, 0.45);
+      if (d.z > 0.35 && e < 1.0) continue; // keep the face clear
+      const t = mesh(sph(0.026 + hr() * 0.012, 7, 5), M.hair, d.x * 0.118, 0.118 + d.y * 0.112, d.z * 0.118 - 0.012, head);
+      t.lookAt(t.position.clone().add(d));
+      t.scale.set(1.4, 1.1, 0.4);
     }
     const fringe = mesh(sph(0.05, 8, 6), M.hair, 0.025, 0.185, 0.075, head); fringe.scale.set(1.5, 0.45, 0.75); fringe.rotation.z = 0.35;
 

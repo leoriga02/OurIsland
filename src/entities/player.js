@@ -118,6 +118,16 @@ export class Player {
   }
 }
 
+// returns t along segment P0->P1 where it crosses segment A->B, or null
+function segIntersect(x0, z0, x1, z1, ax, az, bx, bz) {
+  const dx = x1 - x0, dz = z1 - z0, ex = bx - ax, ez = bz - az;
+  const den = dx * ez - dz * ex;
+  if (Math.abs(den) < 1e-6) return null;
+  const t = ((ax - x0) * ez - (az - z0) * ex) / den;
+  const u = ((ax - x0) * dz - (az - z0) * dx) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? t : null;
+}
+
 export class CameraRig {
   constructor(camera, world) {
     this.camera = camera;
@@ -172,6 +182,15 @@ export class CameraRig {
       const px = base.x + ox * k, py = base.y + oy * k, pz = base.z + oz * k;
       const gh = Math.max(T.heightAt(px, pz), this.world.waterLevel(px, pz) - 0.2) + 0.45;
       if (py < gh) { d = Math.max(1.6, k * 0.9); break; }
+    }
+    // don't let walls block the view: shorten the boom at the first wall it crosses
+    for (const w of this.world.walls) {
+      const ex = base.x + ox * d, ez = base.z + oz * d;
+      const t = segIntersect(base.x, base.z, ex, ez, w.ax, w.az, w.bx, w.bz);
+      if (t !== null) {
+        const hy = base.y + oy * d * t;
+        if (hy > w.bottom - 0.2 && hy < w.top + 0.3) d = Math.max(0.9, d * t - 0.25);
+      }
     }
     this.curDist = d < this.curDist ? d : damp(this.curDist, d, 3, dt);
     const D = this.curDist;

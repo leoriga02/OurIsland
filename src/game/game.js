@@ -712,6 +712,12 @@ export class Game {
     this.birds.update(dt, this.sky.night);
     this.props.update(dt, this.time);
     this.building.animate(dt);
+    // hide the roof over the player's head so the camera can see inside
+    const here = this.building.cells.get(this.building.key(Math.floor(P.pos.x / 3), Math.floor(P.pos.z / 3)));
+    const underRoof = here && here.roof && P.pos.y < here.level + 2;
+    for (const c of this.building.cells.values()) {
+      if (c.roofObj) c.roofObj.visible = !(underRoof && c.roofObj.position.distanceTo(P.pos) < 9);
+    }
     this.updateFlying(dt);
     this.fx.update(dt, this.camera.position, this.sky.night);
     this.fx.setScale(this.renderer.domElement.height / this.renderer.getPixelRatio() * 0.9);
