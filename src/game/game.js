@@ -778,11 +778,23 @@ export class Game {
   }
 
   // Points the player at the current objective (nearest relevant resource / place).
-  questTarget() {
-    const P = this.player.pos;
+  suggestRecipe() {
     const q = QUESTS[this.questIndex];
     if (!q) return null;
-    const nearest = (pred, r = 60) => {
+    if (q.id === 'axe') return 'axe';
+    if (q.id === 'campfire') return 'campfire';
+    if (q.id === 'bed') return this.inv.count('rope') >= 2 ? 'bed' : 'rope';
+    if (q.id === 'foundation' || q.id === 'walls') return 'rope';
+    return null;
+  }
+
+  // What the current objective still needs: { src: world target | null, ui: 'bag' | 'build' | null }
+  questNeed() {
+    const P = this.player.pos;
+    const q = QUESTS[this.questIndex];
+    if (!q) return {};
+    const inv = this.inv, pr = this.progress;
+    const nearest = (pred, r = 70) => {
       let best = null, bd = 1e9;
       for (const o of this.nature.query(P.x, P.z, r)) {
         if (!o.alive || !pred(o)) continue;
@@ -791,19 +803,50 @@ export class Game {
       }
       return best && { x: best.x, y: best.y + 1.2, z: best.z };
     };
-    const pr = this.progress;
+    const source = (id) => {
+      if (id === 'wood' || id === 'leaf') return inv.count('axe') ? nearest((o) => o.kind === 'palm') : nearest((o) => o.kind === 'pickup' && o.item === 'wood');
+      if (id === 'stick') return nearest((o) => o.kind === 'pickup' && o.item === 'stick');
+      if (id === 'stone') return nearest((o) => o.kind === 'pickup' && o.item === 'stone') || nearest((o) => o.kind === 'node');
+      if (id === 'fiber' || id === 'rope') return nearest((o) => o.kind === 'fiber');
+      return null;
+    };
+    // first missing ingredient of a cost (rope counts as 3 fiber)
+    const missing = (cost) => {
+      for (const [k, n] of Object.entries(cost)) {
+        if (inv.count(k) >= n) continue;
+        if (k === 'rope' && inv.count('fiber') >= 3 * (n - inv.count('rope'))) return { ui: 'bag' };
+        return { src: source(k) };
+      }
+      return null;
+    };
+    const R = (out) => RECIPES.find((r) => r.out === out).cost;
     switch (q.id) {
-      case 'gather': return nearest((o) => o.kind === 'pickup' && ((pr.col.stick || 0) < 3 ? o.item === 'stick' : o.item === 'stone'), 40);
-      case 'fiber': return nearest((o) => o.kind === 'fiber', 60);
-      case 'chop': return this.inv.count('axe') ? nearest((o) => o.kind === 'palm', 40) : null;
-      case 'drink': { const p = this.terrain.pond; return { x: p.x, y: p.y + 2, z: p.z }; }
-      default: return null;
+      case 'gather': return { src: nearest((o) => o.kind === 'pickup' && ((pr.col.stick || 0) < 3 ? o.item === 'stick' : o.item === 'stone'), 40) };
+      case 'fiber': return { src: nearest((o) => o.kind === 'fiber') };
+      case 'axe': return missing(R('axe')) || { ui: 'bag' };
+      case 'chop': return inv.count('axe') ? { src: nearest((o) => o.kind === 'palm', 40) } : {};
+      case 'campfire':
+        if (!(pr.crafted.campfire || inv.count('campfire'))) return missing(R('campfire')) || { ui: 'bag' };
+        return { ui: 'hotbar' };
+      case 'drink': { const p = this.terrain.pond; return { src: { x: p.x, y: p.y + 2, z: p.z } }; }
+      case 'foundation': return missing(PIECES.foundation.cost) || { ui: 'build' };
+      case 'walls': return missing(PIECES.wall.cost) || { ui: 'build' };
+      case 'roof': return missing(PIECES.roof.cost) || { ui: 'build' };
+      case 'bed':
+        if (!(pr.crafted.bed || inv.count('bed'))) return missing(R('bed')) || { ui: 'bag' };
+        return pr.placed.bed ? {} : { ui: 'hotbar' };
+      default: return {};
     }
   }
 
   updateWaypoint() {
     this.wpT = (this.wpT || 0) - 1;
-    if (this.wpT <= 0) { this.wpT = 10; this._wpTarget = this.questTarget(); }
+    if (this.wpT <= 0) {
+      this.wpT = 10;
+      const need = this.questNeed() || {};
+      this._wpTarget = need.src || null;
+      this.ui.attention(need.ui);
+    }
     const t = this._wpTarget;
     const P = this.player.pos;
     if (!t || this.building.active || this.panelOpen) { this.ui.setWaypoint(null); return; }

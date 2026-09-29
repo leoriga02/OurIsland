@@ -46,7 +46,7 @@ export class UI {
     press(act, () => { g.input.actionHeld = true; g.onActionPressed(); }, () => { g.input.actionHeld = false; });
     press($('btn-jump'), () => { g.input.jumpPressed = true; });
     press($('btn-build'), () => g.toggleBuild());
-    press($('btn-bag'), () => this.openPanel('inv'));
+    press($('btn-bag'), () => this.openPanel(this._attn === 'bag' ? 'craft' : 'inv'));
     press($('bb-rotate'), () => g.building.rotate());
     press($('bb-cancel'), () => g.toggleBuild(false));
     document.querySelectorAll('#tabs .tab[data-tab]').forEach((b) => b.addEventListener('click', () => this.openPanel(b.dataset.tab)));
@@ -110,6 +110,14 @@ export class UI {
     const bar = el.querySelector('.hp');
     bar.style.display = hp == null ? 'none' : 'block';
     if (hp != null) bar.querySelector('i').style.width = hp * 100 + '%';
+  }
+
+  attention(what) {
+    if (what === this._attn) return;
+    this._attn = what;
+    $('btn-bag').classList.toggle('attn', what === 'bag');
+    $('btn-build').classList.toggle('attn', what === 'build');
+    this.hotbar.classList.toggle('attn', what === 'hotbar');
   }
 
   setWaypoint(p, dist) {
@@ -194,6 +202,8 @@ export class UI {
     this.panel.classList.remove('hidden');
     this.g.panelOpen = true;
     document.querySelectorAll('#tabs .tab[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+    const want = this.g.suggestRecipe?.();
+    if (want) { const i = RECIPES.findIndex((r) => r.out === want); if (i >= 0) this.craftSel = i; }
     this.refreshPanel();
     this.g.onPanelOpen?.(tab);
   }
