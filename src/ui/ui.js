@@ -17,6 +17,7 @@ export class UI {
     $('btn-bag').querySelector('.glyph').innerHTML = SVG.bag;
     $('btn-build').querySelector('.glyph').innerHTML = SVG.hammer;
     $('btn-jump').querySelector('.glyph').innerHTML = SVG.jump;
+    $('btn-sprint').querySelector('.glyph').innerHTML = SVG.sprint;
     const tabs = document.querySelectorAll('#tabs .tab');
     tabs[0].innerHTML = SVG.bag; tabs[1].innerHTML = SVG.craft; tabs[2].innerHTML = SVG.house; tabs[3].innerHTML = SVG.gear;
     this.hotbar = $('hotbar');
@@ -38,13 +39,15 @@ export class UI {
     const g = this.g;
     const act = $('btn-action');
     const press = (el, on, off) => {
-      el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); el.classList.add('pressed'); g.audio.unlock(); on(); });
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ } el.classList.add('pressed'); g.audio.unlock(); on(); });
       const up = (e) => { el.classList.remove('pressed'); off?.(); };
       el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('pointerleave', up);
       el.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     };
     press(act, () => { g.input.actionHeld = true; g.onActionPressed(); }, () => { g.input.actionHeld = false; });
     press($('btn-jump'), () => { g.input.jumpPressed = true; });
+    const sp = $('btn-sprint');
+    press(sp, () => { g.input.sprintHeld = true; sp.classList.add('on'); }, () => { g.input.sprintHeld = false; sp.classList.remove('on'); });
     press($('btn-build'), () => g.toggleBuild());
     press($('btn-bag'), () => this.openPanel(this._attn === 'bag' ? 'craft' : 'inv'));
     press($('bb-rotate'), () => g.building.rotate());

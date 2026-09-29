@@ -85,7 +85,8 @@ export class Game {
     P.onStep = (s) => this.audio.step(s);
     P.onJump = () => this.audio.swing();
     P.onLand = () => this.audio.step('sand');
-    P.onSwimStroke = () => { if (Math.random() < 0.5) this.audio.splash(); this.fx.burst('splash', P.pos.clone().add(new THREE.Vector3(0, 1.0, 0)), 3); };
+    P.onWaterChange = (inWater) => { if (inWater) { this.audio.splash(); this.fx.burst('splash', P.pos.clone().add(new THREE.Vector3(0, 1.3, 0)), 14); } };
+    P.onSwimStroke = () => { if (Math.random() < 0.5) this.audio.splash(); this.fx.burst('splash', P.pos.clone().add(new THREE.Vector3(0, 1.32, 0)).addScaledVector(P.forward, 0.5), 4); };
 
     // pre-render icons
     for (const id of Object.keys(ITEMS)) this.icons.item(id);

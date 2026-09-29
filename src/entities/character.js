@@ -285,20 +285,30 @@ export class Character {
     // --- swimming ---
     if (B.swim > 0.01) {
       const w = B.swim;
-      const moving = clamp(s.speed / 2, 0, 1);
-      this.body.rotation.x = lerp(0, 1.2 * moving + 0.25, w);
-      const sp = ph * 1.0;
-      aL.sh.rotation.x = lerp(aL.sh.rotation.x, moving > 0.2 ? -Math.PI + ((sp % (Math.PI * 2)) - Math.PI) * 0.9 : Math.sin(t * 2) * 0.4 - 0.4, w);
-      aR.sh.rotation.x = lerp(aR.sh.rotation.x, moving > 0.2 ? -Math.PI + (((sp + Math.PI) % (Math.PI * 2)) - Math.PI) * 0.9 : Math.sin(t * 2 + 1) * 0.4 - 0.4, w);
-      aL.sh.rotation.z = lerp(aL.sh.rotation.z, moving > 0.2 ? -0.3 : -0.9, w); aR.sh.rotation.z = lerp(aR.sh.rotation.z, moving > 0.2 ? 0.3 : 0.9, w);
-      aL.el.rotation.x = lerp(aL.el.rotation.x, -0.3, w); aR.el.rotation.x = lerp(aR.el.rotation.x, -0.3, w);
-      const kick = Math.sin(t * 9) * 0.35 * (0.4 + moving);
-      lL.hip.rotation.x = lerp(lL.hip.rotation.x, kick, w); lR.hip.rotation.x = lerp(lR.hip.rotation.x, -kick, w);
-      lL.knee.rotation.x = lerp(lL.knee.rotation.x, 0.2, w); lR.knee.rotation.x = lerp(lR.knee.rotation.x, 0.2, w);
-      this.head.rotation.x = lerp(this.head.rotation.x, -1.0 * moving, w);
+      this.swimMove = lerp(this.swimMove || 0, clamp(s.speed / 2, 0, 1), 1 - Math.exp(-dt * 4));
+      const moving = this.swimMove;
+      // tilt forward around the chest (which stays at the water line) so the head never dips under
+      const tilt = lerp(0, 0.2 + 0.78 * moving, w);
+      const PIV = 1.4;
+      this.body.rotation.x = tilt;
+      this.body.position.set(0, PIV - PIV * Math.cos(tilt), -PIV * Math.sin(tilt));
+      const sp = ph;
+      // breaststroke: arms sweep forward and out; treading water: small sculling circles
+      const stroke = Math.sin(sp);
+      aL.sh.rotation.x = lerp(aL.sh.rotation.x, moving > 0.2 ? -2.2 + stroke * 0.7 : -0.55 + Math.sin(t * 2.4) * 0.3, w);
+      aR.sh.rotation.x = lerp(aR.sh.rotation.x, moving > 0.2 ? -2.2 + stroke * 0.7 : -0.55 + Math.sin(t * 2.4 + 1) * 0.3, w);
+      aL.sh.rotation.z = lerp(aL.sh.rotation.z, moving > 0.2 ? -0.35 - Math.max(0, -stroke) * 0.8 : -0.75 + Math.sin(t * 2.4) * 0.2, w);
+      aR.sh.rotation.z = lerp(aR.sh.rotation.z, moving > 0.2 ? 0.35 + Math.max(0, -stroke) * 0.8 : 0.75 - Math.sin(t * 2.4) * 0.2, w);
+      aL.el.rotation.x = lerp(aL.el.rotation.x, -0.35 - Math.max(0, stroke) * 0.6, w); aR.el.rotation.x = lerp(aR.el.rotation.x, -0.35 - Math.max(0, stroke) * 0.6, w);
+      const kick = Math.sin(t * (moving > 0.2 ? 8 : 4)) * 0.35 * (0.4 + moving);
+      lL.hip.rotation.x = lerp(lL.hip.rotation.x, kick - 0.1, w); lR.hip.rotation.x = lerp(lR.hip.rotation.x, -kick - 0.1, w);
+      lL.knee.rotation.x = lerp(lL.knee.rotation.x, 0.35 + Math.max(0, kick), w); lR.knee.rotation.x = lerp(lR.knee.rotation.x, 0.35 + Math.max(0, -kick), w);
+      this.head.rotation.x = lerp(this.head.rotation.x, -tilt * 0.85, w);
       this.spine.rotation.x = lerp(this.spine.rotation.x, 0, w);
+      this.hips.position.y = lerp(this.hips.position.y, 0.98 + Math.sin(t * 2) * 0.02, w);
     } else {
       this.body.rotation.x = 0;
+      this.body.position.set(0, 0, 0);
     }
 
     // holding a torch up

@@ -45,8 +45,10 @@ export class Player {
     const waterY = W.waterLevel(this.pos.x, this.pos.z);
     const depth = waterY - terrainH;
     const groundH = W.groundHeight(this.pos.x, this.pos.z, this.pos.y);
-    const floorAboveWater = groundH > waterY - 1.0;
-    this.swimming = depth > 1.25 && !floorAboveWater;
+    const floorAboveWater = groundH > waterY - 1.2;
+    // hysteresis: start swimming at chest depth, stop once the feet touch bottom
+    this.swimming = !floorAboveWater && (this.swimming ? depth > 1.2 : depth > 1.4);
+    if (this.swimming !== this._wasSwimming) { this._wasSwimming = this.swimming; this.onWaterChange?.(this.swimming); }
 
     this.running = intent.sprint && mag > 0.3 && !this.swimming;
     let maxSpeed = this.swimming ? (intent.sprint ? 4.0 : 2.9) : this.running ? 7.4 : 4.4;
@@ -60,8 +62,9 @@ export class Player {
 
     // vertical
     if (this.swimming) {
-      const targetY = waterY - 1.02;
-      this.vel.y = damp(this.vel.y, (targetY - this.pos.y) * 4, 6, dt);
+      // float with the chest at the surface (head well above), gently bobbing
+      const targetY = waterY - (this.speed > 1 ? 1.32 : 1.24) + Math.sin(performance.now() / 700) * 0.03;
+      this.vel.y = damp(this.vel.y, (targetY - this.pos.y) * 5, 8, dt);
       this.grounded = false;
     } else {
       if (this.grounded && intent.jump && !busy) {
@@ -173,7 +176,7 @@ export class CameraRig {
     }
     const t = this.target;
     const tx = player.pos.x, tz = player.pos.z;
-    const ty = player.pos.y + (player.swimming ? 1.25 : 1.55);
+    const ty = player.pos.y + (player.swimming ? 1.85 : 1.55);
     t.x = damp(t.x, tx, 14, dt); t.z = damp(t.z, tz, 14, dt); t.y = damp(t.y, ty, 8, dt);
     if (t.distanceToSquared(player.pos) > 400) t.set(tx, ty, tz);
 
@@ -205,10 +208,14 @@ export class CameraRig {
     this.curDist = d < this.curDist ? d : damp(this.curDist, d, 3, dt);
     const D = this.curDist;
     this.pos.set(base.x + ox * D, base.y + oy * D, base.z + oz * D);
-    const minY = Math.max(T.heightAt(this.pos.x, this.pos.z), this.world.waterLevel(this.pos.x, this.pos.z)) + 0.35;
+    const minY = Math.max(T.heightAt(this.pos.x, this.pos.z) + 0.35, this.world.waterLevel(this.pos.x, this.pos.z) + (player.swimming ? 0.9 : 0.45));
     if (this.pos.y < minY) this.pos.y = minY;
 
     this.camera.position.copy(this.pos);
+    // subtle FOV kick while sprinting
+    const baseFov = this.baseFov || (this.baseFov = this.camera.fov);
+    const wantFov = baseFov + (player.running && player.speed > 5 ? 5 : 0);
+    if (Math.abs(this.camera.fov - wantFov) > 0.05) { this.camera.fov = damp(this.camera.fov, wantFov, 5, dt); this.camera.updateProjectionMatrix(); }
     if (this.shakeT > 0) {
       this.shakeT -= dt;
       const a = this.shakeAmp * Math.max(0, this.shakeT) * 4;

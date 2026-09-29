@@ -12,6 +12,8 @@ export class Input {
     this.enabled = true;
     this.lastLookTime = 0;
     this.touchMode = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+    if (!this.touchMode) document.body.classList.add('no-touch');
+    this.sprintHeld = false;
 
     this.joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
     this.lookTouch = { id: null, x: 0, y: 0 };
@@ -45,7 +47,7 @@ export class Input {
       this.onKey?.(e.code);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.actionHeld = false; });
+    window.addEventListener('blur', () => { this.keys.clear(); this.actionHeld = false; this.sprintHeld = false; });
   }
 
   _addLook(dx, dy) {
@@ -100,6 +102,8 @@ export class Input {
       if (t.identifier === this.joy.id) {
         this.joy.id = null; this.joy.x = this.joy.y = 0;
         this.joyBase.classList.remove('active');
+        this.joyBase.style.left = ''; this.joyBase.style.top = '';
+        this.joyKnob.style.transform = 'translate(-50%,-50%)';
       } else if (t.identifier === this.lookTouch.id) {
         this.lookTouch.id = null;
         this.pinch = null;
@@ -121,7 +125,7 @@ export class Input {
     if (len > 1) { x /= len; y /= len; }
     if (!this.enabled) { x = 0; y = 0; }
     const mag = Math.min(1, Math.hypot(x, y));
-    const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || (this.joy.id !== null && mag > 0.92) || this.sprintToggle;
+    const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || this.sprintHeld;
     const jump = this.jumpPressed && this.enabled; this.jumpPressed = false;
     const action = this.enabled && (this.actionHeld || k.has('KeyE') || k.has('KeyF'));
     const look = { dx: this.look.dx, dy: this.look.dy }; this.look.dx = this.look.dy = 0;

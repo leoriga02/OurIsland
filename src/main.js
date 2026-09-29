@@ -37,6 +37,7 @@ function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.fov = camera.aspect < 1.2 ? 72 : camera.aspect > 1.9 ? 55 : 60;
+  if (window.__game) window.__game.rig.baseFov = camera.fov;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', onResize);
