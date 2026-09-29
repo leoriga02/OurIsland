@@ -1,7 +1,8 @@
 // Game orchestrator: world setup, interaction, survival, crafting, building, quests, save/load.
 import * as THREE from 'three';
 import { Terrain } from '../world/terrain.js';
-import { createOcean, createPond } from '../world/water.js';
+import { createOcean, createPond, setWaterIslands } from '../world/water.js';
+import { DistantIslands } from '../world/islands.js';
 import { Sky } from '../world/sky.js';
 import { Nature } from '../world/nature.js';
 import { World } from '../world/world.js';
@@ -49,6 +50,8 @@ export class Game {
     const heightTex = this.terrain.buildHeightTexture();
     this.ocean = createOcean(heightTex); scene.add(this.ocean);
     this.pond = createPond(heightTex, this.terrain.pond); scene.add(this.pond);
+    this.distant = new DistantIslands(scene);
+    setWaterIslands(this.ocean.material, this.distant.waterData());
     this.sky = new Sky(scene, { shadowSize: this.quality >= 2 ? 2048 : 1536 });
     // soft fill light near the camera so the character stays readable at night
     this.fill = new THREE.PointLight(0x9ab8ff, 0, 18, 1.5);

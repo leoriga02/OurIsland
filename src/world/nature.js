@@ -171,13 +171,14 @@ export class Nature {
     const T = this.terrain, r = this.rnd;
     const out = [];
     for (let i = 0; i < tries; i++) {
-      const x = (r() * 2 - 1) * 200, z = (r() * 2 - 1) * 200;
+      const x = (r() * 2 - 1) * 232, z = (r() * 2 - 1) * 232;
       const h = T.heightAt(x, z);
       if (h < 0.3) continue;
       const s = T.coastDist(x, z);
       const slope = T.slopeAt(x, z);
       const pd = T.pathDist(x, z);
-      if (fn({ x, z, h, s, slope, pd, rnd: r })) out.push({ x, z, h });
+      const peak = T.peakHeight(x, z);
+      if (fn({ x, z, h, s, slope, pd, rnd: r, peak })) out.push({ x, z, h });
     }
     return out;
   }
@@ -195,48 +196,7 @@ export class Nature {
       this.pickupPools[id] = new Pool(scene, [{ geo: itemGeometry(id), mat: itemMaterial }], 260, { near: 30, far: 90 });
     }
 
-    // ---- spires (karst pillars) ----
-    const spires = [
-      [-40, -92, 46, 12], [-8, -108, 38, 10], [-60, -62, 32, 10], [16, -84, 28, 8], [-32, -42, 24, 8],
-      [-22, -70, 30, 9], [70, -118, 30, 9], [-95, -95, 28, 9], [-122, 28, 22, 8], [135, -32, 18, 7], [48, -95, 22, 8],
-    ];
-    const spireGreen = [];
-    spires.forEach(([x, z, H, Rr], k) => {
-      const g = spireGeometry(100 + k, H, Rr);
-      const base = T.heightAt(x, z) - 3;
-      const rock = new THREE.Mesh(g.rock, M.rock);
-      rock.position.set(x, base, z);
-      rock.rotation.y = R() * 6;
-      rock.castShadow = true; rock.receiveShadow = true;
-      scene.add(rock);
-      const gm = g.green.clone();
-      gm.applyMatrix4(new THREE.Matrix4().makeRotationY(rock.rotation.y).setPosition(x, base, z));
-      spireGreen.push(gm);
-      this.addCollider(x, z, Rr * 0.95);
-      this.occupy(x, z, Rr + 2);
-    });
-    // sea stacks
-    const stacks = [];
-    for (let i = 0; i < 7; i++) {
-      const a = R() * Math.PI * 2;
-      if (Math.abs(a - Math.PI / 2) < 0.5) { i--; continue; } // keep the spawn view open
-      const d = T.coastR(Math.cos(a) * 150, Math.sin(a) * 150) + 12 + R() * 25;
-      stacks.push([Math.cos(a) * d, Math.sin(a) * d, 10 + R() * 16, 3 + R() * 3]);
-    }
-    stacks.forEach(([x, z, H, Rr], k) => {
-      const g = spireGeometry(300 + k, H, Rr);
-      const base = T.heightAt(x, z) - 2;
-      const rock = new THREE.Mesh(g.rock, M.rock);
-      rock.position.set(x, base, z);
-      rock.castShadow = true; rock.receiveShadow = true;
-      scene.add(rock);
-      const gm = g.green.clone(); gm.translate(x, base, z);
-      spireGreen.push(gm);
-      this.addCollider(x, z, Rr);
-    });
-    const greenMesh = new THREE.Mesh(merge(spireGreen), M.canopy);
-    greenMesh.castShadow = true; greenMesh.receiveShadow = true;
-    scene.add(greenMesh);
+    // karst peaks and islets are part of the terrain heightfield (see Terrain.peakHeight / islets)
 
     // ---- cliff rocks around the waterfall ----
     const P = T.pond, MT = T.mountain;
@@ -255,7 +215,7 @@ export class Nature {
       const topY = hAt(P.r + 9.5, lat);
       const H = Math.max(4, topY - baseY + (flank ? 2.5 : 0.5 + R() * 2.5));
       const Rr = flank ? 2.6 : 2.4 + R() * 1.1;
-      const g = spireGeometry(700 + Math.round(lat * 10), H, Rr, 1.6);
+      const g = spireGeometry(700 + Math.round(lat * 10), H, Rr, 1.6, { top: false, ledges: 2 });
       const rot = new THREE.Matrix4().makeRotationY(R() * 6).setPosition(x, baseY, z);
       g.rock.applyMatrix4(rot); g.green.applyMatrix4(rot);
       pillarRock.push(g.rock); pillarGreen.push(g.green);
@@ -269,7 +229,7 @@ export class Nature {
     scene.add(pr, pg);
 
     // ---- boulders ----
-    const bVariants = [0, 1, 2, 3].map((k) => boulderGeometry(500 + k, { rough: 0.3, flat: 0.3, moss: 0.7, tint: [0.56, 0.5, 0.44] }));
+    const bVariants = [0, 1, 2, 3].map((k) => boulderGeometry(500 + k, { rough: 0.3, flat: 0.3, moss: 0.35, tint: [0.6, 0.56, 0.5] }));
     this.boulderPools = bVariants.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 160, { near: 70 }));
     const placeBoulder = (x, z, s, h, collide = true) => {
       const y = T.heightAt(x, z);
@@ -298,10 +258,10 @@ export class Nature {
     }
     // inland scattered rocks
     this.sample(({ x, z, h, slope, pd }) => h > 2 && pd > 3 && pondOk(x, z, 4) && slope < 0.5 && this.free(x, z, 2), 900)
-      .slice(0, 60).forEach(({ x, z }) => { const s = 0.6 + R() * 1.6; placeBoulder(x, z, s, s * 0.7); });
+      .slice(0, 40).forEach(({ x, z }) => { if (T.heightAt(x, z) > 18) return; const s = 0.6 + R() * 1.4; placeBoulder(x, z, s, s * 0.7); });
     // outcrops on steep slopes break up smooth cliff faces
-    this.sample(({ x, z, h, slope }) => slope > 0.42 && h > 3 && !T.isInPond(x, z, 3) && this.free(x, z, 2.5), 8000)
-      .slice(0, 110).forEach(({ x, z }) => { const s = 2.2 + R() * 3.2; placeBoulder(x, z, s, s * (0.7 + R() * 0.7)); });
+    this.sample(({ x, z, h, slope, peak }) => slope > 0.42 && h > 3 && h < 22 && peak < 2 && T.coastDist(x, z) > 6 && !T.isInPond(x, z, 3) && this.free(x, z, 2.5), 8000)
+      .slice(0, 30).forEach(({ x, z }) => { const s = 2.2 + R() * 3.2; placeBoulder(x, z, s, s * (0.7 + R() * 0.7)); });
 
     // ---- mineable stone nodes ----
     const nodeGeos = [0, 1, 2].map((k) => boulderGeometry(700 + k, { rough: 0.35, flat: 0.25, moss: 0.25, tint: [0.66, 0.64, 0.62] }));
@@ -347,7 +307,7 @@ export class Nature {
       const toSea = Math.atan2(z, x);
       _e.set(0, -toSea + (R() - 0.5) * 1.2, 0); _q.setFromEuler(_e);
       _m.compose(_p.set(x, y, z), _q, _s.set(s, s, s));
-      const idx = this.palmPools[v].add(_m);
+      const idx = this.palmPools[v].add(_m, new THREE.Color().setHSL(0.13 + R() * 0.05, 0.25, 0.5 + R() * 0.12).multiplyScalar(1.9));
       const col = this.addCollider(x, z, 0.35 * s);
       this.occupy(x, z, 2.2);
       this.addResource({ kind: 'palm', x, z, y, r: 0.4, hp: 4, maxHp: 4, pool: this.palmPools[v], variant: v, idx, collider: col, scale: s, rotY: -toSea, label: 'Palm Tree' });
@@ -361,7 +321,7 @@ export class Nature {
     const jLow = [0, 1, 2].map((k) => jungleTreeGeometry(60 + k * 13, true));
     this.jungleVariants = jVariants;
     this.junglePools = jVariants.map((v, k) => new Pool(scene, [{ geo: v.trunk, mat: M.bark }, { geo: v.canopy, mat: M.canopy }], 130, { near: 55, lod: [{ geo: jLow[k].trunk, mat: M.bark }, { geo: jLow[k].canopy, mat: M.canopy }] }));
-    const jSpots = this.sample(({ x, z, h, s, slope, pd, rnd }) => h > 3 && s > 35 && slope < 0.58 && pd > 3.5 && pondOk(x, z, 5) && rnd() < 0.7 && this.free(x, z, 4), 5000);
+    const jSpots = this.sample(({ x, z, h, s, slope, pd, rnd, peak }) => h > 3 && h < 30 && peak < 3 && s > 35 && slope < 0.5 && pd > 3.5 && pondOk(x, z, 5) && rnd() < 0.7 && this.free(x, z, 4), 5000);
     jSpots.slice(0, 330).forEach(({ x, z }) => {
       if (!this.free(x, z, 3.5)) return;
       const v = Math.floor(R() * jVariants.length);
@@ -369,7 +329,7 @@ export class Nature {
       const s = 0.8 + R() * 0.45;
       _e.set(0, R() * 6, 0); _q.setFromEuler(_e);
       _m.compose(_p.set(x, y, z), _q, _s.set(s, s, s));
-      const idx = this.junglePools[v].add(_m);
+      const idx = this.junglePools[v].add(_m, new THREE.Color().setHSL(0.16 + R() * 0.1, 0.35, 0.45 + R() * 0.12).multiplyScalar(2.0));
       const col = this.addCollider(x, z, 0.45 * s);
       this.occupy(x, z, 3.5);
       this.addResource({ kind: 'tree', x, z, y, r: 0.5, hp: 6, maxHp: 6, pool: this.junglePools[v], variant: v, idx, collider: col, scale: s, rotY: _e.y, label: 'Jungle Tree' });
@@ -381,7 +341,7 @@ export class Nature {
     const bushPools = bushGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.bush }], 400, { shadow: this.quality > 0, near: 35, far: 150 }));
     const flowerPool = new Pool(scene, [{ geo: flowerGeometry(), mat: M.flower }], 800, { shadow: false, far: 70 });
     const tint = new THREE.Color();
-    this.sample(({ x, z, h, slope, pd, rnd }) => h > 1.2 && slope < 0.5 && pd > 1.8 && pondOk(x, z, 1) && rnd() < 0.85, 9000)
+    this.sample(({ x, z, h, slope, pd, rnd, peak }) => h > 1.2 && slope < (peak > 3 ? 0.3 : 0.5) && (peak < 3 || rnd() < 0.35) && pd > 1.8 && pondOk(x, z, 1) && rnd() < 0.85, 9000)
       .slice(0, 900).forEach(({ x, z }) => {
         if (this.nearSpawn(x, z, 3)) return;
         const y = T.heightAt(x, z);
@@ -403,7 +363,7 @@ export class Nature {
       });
     const banGeos = [bananaPlantGeometry(1), bananaPlantGeometry(2)];
     const banPools = banGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.banana }], 250, { shadow: this.quality > 0, near: 35, far: 140 }));
-    this.sample(({ x, z, h, s, slope, pd, rnd }) => h > 1.6 && slope < 0.4 && pd > 2 && pondOk(x, z, 0) && (s > 30 || rnd() < 0.3), 5000)
+    this.sample(({ x, z, h, s, slope, pd, rnd, peak }) => h > 1.6 && h < 26 && peak < 2 && slope < 0.4 && pd > 2 && pondOk(x, z, 0) && (s > 30 || rnd() < 0.3), 5000)
       .slice(0, 420).forEach(({ x, z }) => {
         if (this.nearSpawn(x, z, 4)) return;
         const y = T.heightAt(x, z);

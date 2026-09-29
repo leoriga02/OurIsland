@@ -350,7 +350,7 @@ export function boulderGeometry(seed, { detail = 16, rough = 0.28, flat = 0.35, 
 }
 
 // Tall limestone karst pillar with vertical fluting.
-export function spireGeometry(seed, H = 30, R = 7, rough = 1) {
+export function spireGeometry(seed, H = 30, R = 7, rough = 1, { top = true, ledges = 4 } = {}) {
   const rnd = mulberry32(seed);
   let g = new THREE.CylinderGeometry(R * 0.55, R, H, 28, 22, false);
   g.deleteAttribute('uv'); g.deleteAttribute('normal');
@@ -394,8 +394,8 @@ export function spireGeometry(seed, H = 30, R = 7, rough = 1) {
   // greenery on top and ledges
   const cb = newBuf();
   const topR = R * 0.55 * 0.8;
-  leafCards(cb, new THREE.Vector3(lean * H, H + 0.5, 0), new THREE.Vector3(topR * 1.2, 1.6, topR * 1.2), 40, 2.6, rnd, [0.9, 1, 0.85]);
-  for (let k = 0; k < 4; k++) {
+  if (top) leafCards(cb, new THREE.Vector3(lean * H, H + 0.5, 0), new THREE.Vector3(topR * 1.2, 1.6, topR * 1.2), 40, 2.6, rnd, [0.9, 1, 0.85]);
+  for (let k = 0; k < ledges; k++) {
     const t = 0.35 + rnd() * 0.5, a = rnd() * Math.PI * 2;
     const rr = R * (1 - t * 0.45) * 1.05;
     leafCards(cb, new THREE.Vector3(Math.cos(a) * rr + lean * t * t * H, t * H, Math.sin(a) * rr), new THREE.Vector3(2.2, 1.1, 2.2), 14, 1.8, rnd, [0.9, 1, 0.85]);

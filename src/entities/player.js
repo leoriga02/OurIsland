@@ -4,9 +4,9 @@ import { Character } from './character.js';
 import { damp, angleDamp, clamp, lerp } from '../util/noise.js';
 
 export class Player {
-  constructor(scene, world) {
+  constructor(scene, world, variant = 'm') {
     this.world = world;
-    this.char = new Character();
+    this.char = new Character(variant);
     scene.add(this.char.root);
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -72,7 +72,17 @@ export class Player {
     }
 
     const nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
-    this.pos.x = nx; this.pos.z = nz;
+    // too steep to walk up (cliffs, karst towers): slide along or stop
+    const steep = (x, z) => {
+      const rise = W.groundHeight(x, z, this.pos.y) - this.pos.y;
+      const run = Math.hypot(x - this.pos.x, z - this.pos.z);
+      return rise > 0.25 && rise > run * 1.25 + 0.05;
+    };
+    if (!this.swimming && steep(nx, nz)) {
+      if (!steep(nx, this.pos.z)) { this.pos.x = nx; this.vel.z = 0; }
+      else if (!steep(this.pos.x, nz)) { this.pos.z = nz; this.vel.x = 0; }
+      else { this.vel.x = 0; this.vel.z = 0; }
+    } else { this.pos.x = nx; this.pos.z = nz; }
     this.pos.y += this.vel.y * dt;
     W.resolveCollisions(this.pos, this.radius);
 

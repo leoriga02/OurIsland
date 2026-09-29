@@ -18,6 +18,8 @@ const frag = /* glsl */`
   #include <common>
   #include <fog_pars_fragment>
   uniform sampler2D uHeight;
+  uniform vec3 uIslands[12];
+  uniform int uIslandCount;
   uniform float uTime, uWorldSize, uLevel, uHtMin, uHtMax, uPond, uNight;
   uniform vec3 uSunDir, uSunColor, uZenith, uHorizon, uShallow, uMid, uDeep;
   varying vec3 vWorld;
@@ -49,6 +51,13 @@ const frag = /* glsl */`
     float th = terrainH(p);
     float depth = uLevel - th;
     if (uPond > 0.5) depth = max(depth, 0.0) + 0.6;
+    // distant islands live outside the height texture: fake a shallow shelf around each
+    for (int i = 0; i < 12; i++) {
+      if (i >= uIslandCount) break;
+      vec3 isl = uIslands[i];
+      float dd = length(p - isl.xy) - isl.z * 1.02;
+      depth = min(depth, max(dd, 0.0) * 0.09 + 0.04);
+    }
 
     vec2 g = waveGrad(p, t);
     // fine ripples
@@ -122,6 +131,8 @@ export function createWaterMaterial(heightTex, { level = 0, pond = false } = {})
         uHtMin: { value: HT_MIN }, uHtMax: { value: HT_MAX },
         uPond: { value: pond ? 1 : 0 },
         uNight: { value: 0 },
+        uIslands: { value: Array.from({ length: 12 }, () => new THREE.Vector3(1e6, 1e6, 0)) },
+        uIslandCount: { value: 0 },
         uSunDir: { value: new THREE.Vector3(0.5, 0.8, 0.3) },
         uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
         uZenith: { value: new THREE.Color(0x2f7fd8) },
@@ -142,6 +153,11 @@ export function createOcean(heightTex) {
   mesh.renderOrder = 1;
   mesh.name = 'ocean';
   return mesh;
+}
+
+export function setWaterIslands(mat, list) {
+  list.slice(0, 12).forEach((v, i) => mat.uniforms.uIslands.value[i].copy(v));
+  mat.uniforms.uIslandCount.value = Math.min(12, list.length);
 }
 
 export function createPond(heightTex, pond) {

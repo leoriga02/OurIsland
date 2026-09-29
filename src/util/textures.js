@@ -259,6 +259,30 @@ export function sandDetailTexture() {
   });
 }
 
+// Streaky weathered limestone (grayscale): vertical rain streaks, cracks and ledges.
+export function rockDetailTexture() {
+  return cached('rockDetail', () => {
+    const S = 256;
+    const c = canvas(S, S), g = c.getContext('2d');
+    g.fillStyle = 'rgb(200,200,200)'; g.fillRect(0, 0, S, S);
+    const r = mulberry32(61);
+    const wrapDraw = (fn) => { for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) { g.save(); g.translate(ox, oy); fn(); g.restore(); } };
+    for (let i = 0; i < 90; i++) { // soft blotches
+      const x = r() * S, y = r() * S, rad = 10 + r() * 40, v = Math.floor(150 + r() * 100);
+      wrapDraw(() => { const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(${v},${v},${v},0.5)`); gr.addColorStop(1, `rgba(${v},${v},${v},0)`); g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2); });
+    }
+    for (let i = 0; i < 160; i++) { // vertical streaks
+      const x = r() * S, y = r() * S, l = 20 + r() * 90, v = Math.floor(90 + r() * 80);
+      wrapDraw(() => { g.strokeStyle = `rgba(${v},${v},${v},${0.25 + r() * 0.35})`; g.lineWidth = 1 + r() * 3; g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + (r() - 0.5) * 6, y + l * 0.3, x + (r() - 0.5) * 6, y + l * 0.6, x + (r() - 0.5) * 4, y + l); g.stroke(); });
+    }
+    for (let i = 0; i < 22; i++) { // horizontal ledges / bedding planes
+      const y = r() * S, v = Math.floor(60 + r() * 50);
+      wrapDraw(() => { g.strokeStyle = `rgba(${v},${v},${v},0.55)`; g.lineWidth = 1 + r() * 2; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= S; x += 16) g.lineTo(x, y + (r() - 0.5) * 5); g.stroke(); g.strokeStyle = 'rgba(245,245,245,0.35)'; g.beginPath(); g.moveTo(0, y + 2.5); g.lineTo(S, y + 2.5 + (r() - 0.5) * 4); g.stroke(); });
+    }
+    return tex(c, { repeat: true, srgb: false });
+  });
+}
+
 export function barkTexture(base = [120, 88, 60], key = 'bark') {
   return cached(key, () => {
     const W = 128, H = 256;
