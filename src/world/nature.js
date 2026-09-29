@@ -469,6 +469,16 @@ export class Nature {
     // ---- grass (chunked) ----
     this._grass();
 
+    // baked AO under trees and rocks
+    const spots = [];
+    for (const r of this.all) {
+      if (r.kind === 'palm') spots.push({ x: r.x, z: r.z, r: 3, k: 0.28 });
+      else if (r.kind === 'tree') spots.push({ x: r.x, z: r.z, r: 5, k: 0.4 });
+      else if (r.kind === 'node') spots.push({ x: r.x, z: r.z, r: r.r * 2, k: 0.3 });
+    }
+    for (const o of this.occupied.map.values()) for (const c of o) if (c.r > 2.5 && c.r < 6) spots.push({ x: c.x, z: c.z, r: c.r * 1.3, k: 0.3 });
+    if (T.mesh) T.bakeOcclusion(spots);
+
     this.pools = [...this.boulderPools, ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
     for (const p of this.pools) p.finalize();
     this.cliffRocks = cliffRocks;

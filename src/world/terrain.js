@@ -229,6 +229,24 @@ export class Terrain {
     return c;
   }
 
+  // Darkens terrain colours around trunks/rocks: cheap baked ambient occlusion.
+  bakeOcclusion(spots) {
+    const col = this.mesh.geometry.attributes.color;
+    const N = GRID + 1;
+    for (const { x, z, r, k } of spots) {
+      const i0 = Math.max(0, Math.floor((x - r + HALF) / CELL)), i1 = Math.min(GRID, Math.ceil((x + r + HALF) / CELL));
+      const j0 = Math.max(0, Math.floor((z - r + HALF) / CELL)), j1 = Math.min(GRID, Math.ceil((z + r + HALF) / CELL));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const d = Math.hypot(-HALF + i * CELL - x, -HALF + j * CELL - z);
+        if (d > r) continue;
+        const f = 1 - k * (1 - d / r) ** 1.5;
+        const idx = j * N + i;
+        col.setXYZ(idx, col.getX(idx) * f, col.getY(idx) * f, col.getZ(idx) * f);
+      }
+    }
+    col.needsUpdate = true;
+  }
+
   // Encodes terrain height in a texture so water can compute depth & foam.
   buildHeightTexture() {
     const N = GRID + 1;

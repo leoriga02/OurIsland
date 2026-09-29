@@ -304,7 +304,7 @@ export function flowerGeometry() {
 }
 
 // ---------- rocks ----------
-export function boulderGeometry(seed, { detail = 16, rough = 0.28, flat = 0.35, moss = 0.6, tint = [0.55, 0.51, 0.46] } = {}) {
+export function boulderGeometry(seed, { detail = 16, rough = 0.28, flat = 0.35, moss = 0.6, tint = [0.55, 0.51, 0.46], cuts = 4 } = {}) {
   const rnd = mulberry32(seed);
   let g = new THREE.SphereGeometry(1, detail, Math.round(detail * 0.7));
   g.deleteAttribute('uv'); g.deleteAttribute('normal');
@@ -312,11 +312,23 @@ export function boulderGeometry(seed, { detail = 16, rough = 0.28, flat = 0.35, 
   const p = g.attributes.position;
   const o = rnd() * 100;
   const disp = new Float32Array(p.count);
+  // random slicing planes give chunky, fractured faces instead of an egg shape
+  const planes = [];
+  for (let k = 0; k < cuts; k++) {
+    const n = new THREE.Vector3(rnd() * 2 - 1, rnd() * 1.4 - 0.2, rnd() * 2 - 1).normalize();
+    planes.push({ n, d: 0.62 + rnd() * 0.25 });
+  }
+  const v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
     let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
     const d = 1 + rough * fbm3(x * 1.2 + o, y * 1.2, z * 1.2 + o, 3) + 0.06 * noise3(x * 5 + o, y * 5, z * 5);
     disp[i] = d;
-    x *= d; y *= d; z *= d;
+    v.set(x * d, y * d, z * d);
+    for (const pl of planes) {
+      const t = v.dot(pl.n) - pl.d;
+      if (t > 0) { v.addScaledVector(pl.n, -t * 0.85); disp[i] -= t * 0.4; }
+    }
+    x = v.x; y = v.y; z = v.z;
     if (y < -flat) y = -flat + (y + flat) * 0.25;
     p.setXYZ(i, x, y, z);
   }

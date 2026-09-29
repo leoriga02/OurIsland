@@ -815,7 +815,7 @@ export class Game {
 
   start() {
     this.started = true;
-    this.intro = { t: 0, pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() };
+    this.intro = this.titleYaw !== undefined ? { t: 0, pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() } : null;
     this.audio.unlock();
     this.rig.target.copy(this.player.pos);
     if (!this.loaded) {
