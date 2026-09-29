@@ -106,6 +106,14 @@ export class UI {
     if (hp != null) bar.querySelector('i').style.width = hp * 100 + '%';
   }
 
+  setWaypoint(p, dist) {
+    const el = this._wp || (this._wp = document.getElementById('waypoint'));
+    if (!p) { el.classList.remove('show'); return; }
+    el.classList.add('show');
+    el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+    el.querySelector('.wp-d').textContent = dist > 4 ? Math.round(dist) + ' m' : '';
+  }
+
   setAction(a) {
     const key = a.label + '|' + a.icon + '|' + a.ready;
     if (key === this.actionKey) return;

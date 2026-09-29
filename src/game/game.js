@@ -9,6 +9,7 @@ import { Props } from '../world/props.js';
 import { shared } from '../world/materials.js';
 import { Player, CameraRig } from '../entities/player.js';
 import { Crabs } from '../entities/crabs.js';
+import { Birds } from '../entities/birds.js';
 import { Input } from '../input.js';
 import { Inventory, HOTBAR } from './inventory.js';
 import { ITEMS, RECIPES, PIECES, itemMesh } from './items.js';
@@ -53,6 +54,7 @@ export class Game {
     this.fx = new Fx(scene);
     this.building = new Building(scene, this.world, this.fx);
     this.crabs = new Crabs(scene, this.terrain, 14);
+    this.birds = new Birds(scene, 10);
     this.player = new Player(scene, this.world);
     this.rig = new CameraRig(this.camera, this.world);
     this.input = new Input(this.canvas);
@@ -80,6 +82,7 @@ export class Game {
     // pre-render icons
     for (const id of Object.keys(ITEMS)) this.icons.item(id);
     for (const id of Object.keys(PIECES)) this.pieceIcon(id);
+    this.icons.dispose();
 
     const sp = this.terrain.spawn;
     P.teleport(sp.x, sp.z, Math.PI);
@@ -358,10 +361,10 @@ export class Game {
               this.fx.burst('leaf', fall.clone().add(new THREE.Vector3(0, 0.5, 0)), 24);
               this.fx.burst('dust', fall, 14);
               if (o.kind === 'palm') {
-                this.give('wood', 3); this.give('leaf', 3);
+                this.give('wood', 4); this.give('leaf', 3);
                 if (Math.random() < 0.6) this.give('coconut', 1 + (Math.random() < 0.3 ? 1 : 0));
               } else {
-                this.give('wood', 4); this.give('stick', 2);
+                this.give('wood', 5); this.give('stick', 2);
                 if (Math.random() < 0.3) this.give('leaf', 1);
               }
               this.progress.felled++;
@@ -657,6 +660,7 @@ export class Game {
     this.pond.material.uniforms.uTime.value += dt;
     this.nature.update(dt, this.camera.position, this.time);
     this.crabs.update(dt, P, this.time);
+    this.birds.update(dt, this.sky.night);
     this.props.update(dt, this.time);
     this.building.animate(dt);
     this.fx.update(dt, this.camera.position, this.sky.night);
@@ -685,6 +689,7 @@ export class Game {
     if (!this.progress.reachedPeak && P.pos.y > 28) { this.progress.reachedPeak = true; this.ui.center('What a view!', 'You climbed high into the peaks', 2500); }
 
     // HUD
+    this.updateWaypoint();
     this.ui.setStats(this.stats);
     this.ui.setQuest(this.currentQuest());
     this.hudT = (this.hudT || 0) - dt;
@@ -713,6 +718,46 @@ export class Game {
     // autosave
     this.saveT = (this.saveT || 0) + dt;
     if (this.saveT > 20) { this.saveT = 0; this.save(); }
+  }
+
+  // Points the player at the current objective (nearest relevant resource / place).
+  questTarget() {
+    const P = this.player.pos;
+    const q = QUESTS[this.questIndex];
+    if (!q) return null;
+    const nearest = (pred, r = 60) => {
+      let best = null, bd = 1e9;
+      for (const o of this.nature.query(P.x, P.z, r)) {
+        if (!o.alive || !pred(o)) continue;
+        const d = Math.hypot(o.x - P.x, o.z - P.z);
+        if (d < bd) { bd = d; best = o; }
+      }
+      return best && { x: best.x, y: best.y + 1.2, z: best.z };
+    };
+    const pr = this.progress;
+    switch (q.id) {
+      case 'gather': return nearest((o) => o.kind === 'pickup' && ((pr.col.stick || 0) < 3 ? o.item === 'stick' : o.item === 'stone'), 40);
+      case 'fiber': return nearest((o) => o.kind === 'fiber', 60);
+      case 'chop': return this.inv.count('axe') ? nearest((o) => o.kind === 'palm', 40) : null;
+      case 'drink': { const p = this.terrain.pond; return { x: p.x, y: p.y + 2, z: p.z }; }
+      default: return null;
+    }
+  }
+
+  updateWaypoint() {
+    this.wpT = (this.wpT || 0) - 1;
+    if (this.wpT <= 0) { this.wpT = 10; this._wpTarget = this.questTarget(); }
+    const t = this._wpTarget;
+    const P = this.player.pos;
+    if (!t || this.building.active || this.panelOpen) { this.ui.setWaypoint(null); return; }
+    const d = Math.hypot(t.x - P.x, t.z - P.z);
+    if (d < 2.2) { this.ui.setWaypoint(null); return; }
+    const v = new THREE.Vector3(t.x, t.y, t.z).project(this.camera);
+    const W = window.innerWidth, H = window.innerHeight;
+    let x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
+    if (v.z > 1) { x = W - x; y = H - 40; }
+    x = clamp(x, 40, W - 40); y = clamp(y, 60, H - 90);
+    this.ui.setWaypoint({ x, y }, d);
   }
 
   start() {

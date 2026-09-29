@@ -25,6 +25,7 @@ export class IconFactory {
 
   render(key, obj, { rx = -0.45, ry = 0.6, rz = 0, pad = 1.2 } = {}) {
     if (this.cache[key]) return this.cache[key];
+    if (this.disposed) return '';
     const holder = new THREE.Group();
     holder.add(obj);
     obj.rotation.set(0, 0, rz);
@@ -64,6 +65,7 @@ export class IconFactory {
   }
 
   dispose() {
+    this.disposed = true;
     this.renderer.dispose();
     this.renderer.forceContextLoss?.();
   }

@@ -29,7 +29,7 @@ function fabricTexture(base, speck, seed) {
 }
 
 const mats = () => ({
-  skin: new THREE.MeshStandardMaterial({ color: 0xb4744c, roughness: 0.6 }),
+  skin: new THREE.MeshStandardMaterial({ color: 0xa9704e, roughness: 0.58 }),
   stubble: new THREE.MeshStandardMaterial({ color: 0x80563c, roughness: 0.8 }),
   shirt: new THREE.MeshStandardMaterial({ map: fabricTexture('#cdb994', '90,62,38', 1), roughness: 0.95 }),
   shorts: new THREE.MeshStandardMaterial({ map: fabricTexture('#534a3c', '30,24,18', 2), roughness: 0.95 }),
@@ -140,9 +140,11 @@ export class Character {
       spine.add(sh);
       mesh(sph(0.07, 12, 10), M.shirt, 0, -0.02, 0, sh).scale.set(1, 1, 0.95);
       mesh(cap(0.066, 0.08), M.shirt, 0, -0.08, 0, sh);
-      mesh(cap(0.05, 0.2), M.skin, 0, -0.16, 0, sh);
+      mesh(cap(0.054, 0.2), M.skin, 0, -0.16, 0, sh);
+      mesh(sph(1, 10, 8), M.skin, 0, -0.15, 0.018, sh).scale.set(0.05, 0.085, 0.048);
       const el = new THREE.Group(); el.position.y = -0.29; sh.add(el);
       mesh(cap(0.044, 0.19), M.skin, 0, -0.12, 0, el);
+      mesh(sph(1, 10, 8), M.skin, 0, -0.07, 0.006, el).scale.set(0.05, 0.08, 0.048);
       mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.045, 12), M.leather, 0, -0.2, 0, el);
       const hand = new THREE.Group(); hand.position.y = -0.27; el.add(hand);
       mesh(sph(1, 10, 8), M.skin, 0, -0.03, 0.005, hand).scale.set(0.038, 0.058, 0.03);
@@ -160,6 +162,8 @@ export class Character {
       const cuff = mesh(new THREE.CylinderGeometry(0.093, 0.09, 0.05, 14), M.shorts, 0, -0.34, 0, hip);
       const knee = new THREE.Group(); knee.position.y = -0.42; hip.add(knee);
       mesh(cap(0.056, 0.27), M.skin, 0, -0.18, 0, knee);
+      mesh(sph(1, 10, 8), M.skin, 0, -0.11, -0.018, knee).scale.set(0.064, 0.11, 0.062);
+      mesh(sph(1, 8, 6), M.skin, 0, 0.0, 0.012, knee).scale.set(0.06, 0.06, 0.055);
       mesh(new THREE.CylinderGeometry(0.06, 0.058, 0.06, 12), new THREE.MeshStandardMaterial({ color: 0x8a8070, roughness: 1 }), 0, -0.3, 0, knee);
       const foot = new THREE.Group(); foot.position.y = -0.43; knee.add(foot);
       mesh(new THREE.CylinderGeometry(0.066, 0.07, 0.15, 12), M.boot, 0, 0.05, 0, foot);
