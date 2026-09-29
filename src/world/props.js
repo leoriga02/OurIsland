@@ -105,28 +105,31 @@ export class Props {
     const T = this.terrain, P = T.pond, scene = this.scene;
     const M = T.mountain;
     let dx = M.x - P.x, dz = M.z - P.z; const L = Math.hypot(dx, dz); dx /= L; dz /= L;
-    const topD = P.r + 3 + 6.5;
+    const topD = P.r + 3 + 5.5;
     const tx = P.x + dx * topD, tz = P.z + dz * topD;
-    const topY = T.heightAt(tx, tz) + 0.3;
-    const botD = P.r - 1.5;
-    const bx = P.x + dx * botD, bz = P.z + dz * botD;
-    const H = topY - P.y;
+    const topY = T.heightAt(tx, tz) + 0.4;
+    const planeD = P.r + 1.6;
+    const bx = P.x + dx * (P.r - 1), bz = P.z + dz * (P.r - 1);
+    const H = topY - P.y + 0.3;
+    const back = topD - planeD;
     const tex = waterfallTexture();
     tex.repeat.set(1, 2);
     this.wfTex = tex;
-    const geo = new THREE.PlaneGeometry(3.6, H, 6, 16);
+    const geo = new THREE.PlaneGeometry(4.2, H, 6, 24);
     const p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const y = p.getY(i); const t = (y + H / 2) / H; // 0 bottom 1 top
-      // curve out at the lip, straight fall below
-      p.setZ(i, Math.pow(t, 6) * -1.5 + (1 - t) * 0.6 + Math.sin(p.getX(i) * 3 + y) * 0.08);
-      p.setX(i, p.getX(i) * (1 + (1 - t) * 0.35));
+      // falls straight, then bends back over the lip of the cliff
+      const lip = Math.max(0, (t - 0.82) / 0.18);
+      p.setZ(i, -back * lip * lip + (1 - t) * 0.5 + Math.sin(p.getX(i) * 3 + y) * 0.08);
+      p.setY(i, y - lip * lip * 0.6);
+      p.setX(i, p.getX(i) * (1 + (1 - t) * 0.3));
     }
     geo.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity: 0.92, roughness: 0.2, depthWrite: false, side: THREE.DoubleSide, emissive: 0x99c8d8, emissiveIntensity: 0.25 });
     const wf = new THREE.Mesh(geo, mat);
-    const midD = (topD + botD) / 2 - 0.5;
-    wf.position.set(P.x + dx * midD, P.y + H / 2, P.z + dz * midD);
+    const midD = planeD;
+    wf.position.set(P.x + dx * midD, P.y - 0.3 + H / 2, P.z + dz * midD);
     wf.rotation.y = Math.atan2(-dx, -dz);
     wf.renderOrder = 2;
     scene.add(wf);

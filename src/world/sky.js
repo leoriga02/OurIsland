@@ -43,9 +43,9 @@ const skyFrag = /* glsl */`
 
 // Colour keyframes by sun elevation
 const K = {
-  day: { zen: 0x2a78d6, hor: 0xb4ddf2, sun: 0xfff1d8, sunI: 3.1, hemiSky: 0xd4ecff, hemiGround: 0x6b8a4a, hemiI: 1.25, fog: 0xa9d4ee },
+  day: { zen: 0x2a78d6, hor: 0xb4ddf2, sun: 0xfff0d4, sunI: 3.0, hemiSky: 0xcfe6ff, hemiGround: 0x5a7040, hemiI: 1.05, fog: 0xa9d4ee },
   gold: { zen: 0x4a78b8, hor: 0xf6b37c, sun: 0xffb46e, sunI: 2.0, hemiSky: 0xffd2a8, hemiGround: 0x6a5a3a, hemiI: 0.9, fog: 0xe8b890 },
-  night: { zen: 0x040a1c, hor: 0x1b2d52, sun: 0x9db8ff, sunI: 0.55, hemiSky: 0x4a64a0, hemiGround: 0x1a2230, hemiI: 0.5, fog: 0x14223e },
+  night: { zen: 0x06122e, hor: 0x24406e, sun: 0xa8c4ff, sunI: 1.0, hemiSky: 0x6a88c8, hemiGround: 0x2a3448, hemiI: 1.0, fog: 0x1c3052 },
 };
 const cc = (h) => new THREE.Color(h);
 const KC = {};

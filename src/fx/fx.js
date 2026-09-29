@@ -89,7 +89,7 @@ export class Fx {
   sparkle(at, n = 10, color = 0xffe08a) {
     const c = new THREE.Color(color);
     for (let i = 0; i < n; i++) {
-      this._spawn(this.gparts, { life: 0.9, max: 0.9, x: at.x + (Math.random() - 0.5) * 0.8, y: at.y + Math.random() * 0.6, z: at.z + (Math.random() - 0.5) * 0.8, vx: 0, vy: 0.8 + Math.random(), vz: 0, grav: 0, size: 0.18, r: c.r, g: c.g, b: c.b });
+      this._spawn(this.gparts, { life: 0.9, max: 0.9, x: at.x + (Math.random() - 0.5) * 0.8, y: at.y + Math.random() * 0.6, z: at.z + (Math.random() - 0.5) * 0.8, vx: 0, vy: 0.5 + Math.random() * 0.6, vz: 0, grav: 0, size: 0.07 + Math.random() * 0.04, r: c.r, g: c.g, b: c.b });
     }
   }
 

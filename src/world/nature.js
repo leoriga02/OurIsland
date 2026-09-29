@@ -193,18 +193,30 @@ export class Nature {
     let dx = MT.x - P.x, dz = MT.z - P.z; const L = Math.hypot(dx, dz); dx /= L; dz /= L;
     this.waterfallDir = new THREE.Vector2(dx, dz);
     const cliffRocks = [];
-    for (let i = -7; i <= 7; i++) {
-      if (Math.abs(i) < 1) continue;
-      const lat = i * 3.2 + (R() - 0.5) * 1.5;
-      const t = P.r + 5 + R() * 2.5;
-      const x = P.x + dx * t + -dz * lat, z = P.z + dz * t + dx * lat;
-      cliffRocks.push({ x, z, s: 4 + R() * 3.5, h: 6 + R() * 5 });
+    // columnar limestone pillars forming the cliff face around the waterfall
+    const pillarRock = [], pillarGreen = [];
+    const hAt = (t, lat) => T.heightAt(P.x + dx * t - dz * lat, P.z + dz * t + dx * lat);
+    for (let lat = -21; lat <= 21; lat += 2.9 + R() * 0.8) {
+      if (Math.abs(lat) < 2.3) continue;
+      const flank = Math.abs(lat) < 5.5;
+      const t = P.r + (flank ? 3.2 : 4 + R() * 1.2);
+      const x = P.x + dx * t - dz * lat, z = P.z + dz * t + dx * lat;
+      const baseY = Math.min(T.heightAt(x, z), hAt(t - 3, lat), hAt(t - 1.5, lat - 2), hAt(t - 1.5, lat + 2)) - 2;
+      const topY = hAt(P.r + 9.5, lat);
+      const H = Math.max(4, topY - baseY + (flank ? 2.5 : 0.5 + R() * 2.5));
+      const Rr = flank ? 2.6 : 2.4 + R() * 1.1;
+      const g = spireGeometry(700 + Math.round(lat * 10), H, Rr, 1.6);
+      const rot = new THREE.Matrix4().makeRotationY(R() * 6).setPosition(x, baseY, z);
+      g.rock.applyMatrix4(rot); g.green.applyMatrix4(rot);
+      pillarRock.push(g.rock); pillarGreen.push(g.green);
+      this.addCollider(x, z, Rr * 0.9, baseY + H);
+      this.occupy(x, z, Rr);
     }
-    // flanking rocks framing the fall
-    for (const side of [-1, 1]) {
-      const t = P.r + 4.5, lat = side * 3.2;
-      cliffRocks.push({ x: P.x + dx * t - dz * lat, z: P.z + dz * t + dx * lat, s: 3.2, h: 12 });
-    }
+    const pr = new THREE.Mesh(merge(pillarRock), M.rock);
+    pr.castShadow = pr.receiveShadow = true;
+    const pg = new THREE.Mesh(merge(pillarGreen), M.canopy);
+    pg.castShadow = pg.receiveShadow = true;
+    scene.add(pr, pg);
 
     // ---- boulders ----
     const bVariants = [0, 1, 2, 3].map((k) => boulderGeometry(500 + k, { rough: 0.3, flat: 0.3, moss: 0.7, tint: [0.56, 0.5, 0.44] }));
@@ -238,6 +250,9 @@ export class Nature {
     // inland scattered rocks
     this.sample(({ x, z, h, slope, pd }) => h > 2 && pd > 3 && pondOk(x, z, 4) && slope < 0.5 && this.free(x, z, 2), 900)
       .slice(0, 60).forEach(({ x, z }) => { const s = 0.6 + R() * 1.6; placeBoulder(x, z, s, s * 0.7); });
+    // outcrops on steep slopes break up smooth cliff faces
+    this.sample(({ x, z, h, slope }) => slope > 0.42 && h > 3 && !T.isInPond(x, z, 3) && this.free(x, z, 2.5), 8000)
+      .slice(0, 110).forEach(({ x, z }) => { const s = 2.2 + R() * 3.2; placeBoulder(x, z, s, s * (0.7 + R() * 0.7)); });
     bigRocks.meshes.forEach((m) => scene.remove(m));
 
     // ---- mineable stone nodes ----
@@ -296,8 +311,8 @@ export class Nature {
     const jVariants = [0, 1, 2].map((k) => jungleTreeGeometry(60 + k * 13));
     this.jungleVariants = jVariants;
     this.junglePools = jVariants.map((v) => new Pool(scene, [{ geo: v.trunk, mat: M.bark }, { geo: v.canopy, mat: M.canopy }], 110));
-    const jSpots = this.sample(({ x, z, h, s, slope, pd, rnd }) => h > 3 && s > 35 && slope < 0.45 && pd > 3.5 && pondOk(x, z, 5) && rnd() < 0.7 && this.free(x, z, 4), 5000);
-    jSpots.slice(0, 300).forEach(({ x, z }) => {
+    const jSpots = this.sample(({ x, z, h, s, slope, pd, rnd }) => h > 3 && s > 35 && slope < 0.58 && pd > 3.5 && pondOk(x, z, 5) && rnd() < 0.7 && this.free(x, z, 4), 5000);
+    jSpots.slice(0, 330).forEach(({ x, z }) => {
       if (!this.free(x, z, 3.5)) return;
       const v = Math.floor(R() * jVariants.length);
       const y = T.heightAt(x, z) - 0.15;

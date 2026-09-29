@@ -12,7 +12,7 @@ renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.94;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -70,7 +70,8 @@ async function boot() {
     game.update(dt);
     renderer.render(scene, camera);
     // adaptive resolution
-    fpsAcc += dt; fpsN++; fpsT += dt;
+    const real = Math.min((now - (frame.prev || now)) / 1000, 0.5); frame.prev = now;
+    fpsAcc += real; fpsN++; fpsT += real;
     if (fpsT > 3) {
       const fps = fpsN / fpsAcc;
       if (fps < 40 && pixelRatio > 1) { pixelRatio = Math.max(1, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); onResize(); }

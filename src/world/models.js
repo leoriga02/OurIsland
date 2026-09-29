@@ -335,7 +335,7 @@ export function boulderGeometry(seed, { detail = 22, rough = 0.28, flat = 0.35, 
 }
 
 // Tall limestone karst pillar with vertical fluting.
-export function spireGeometry(seed, H = 30, R = 7) {
+export function spireGeometry(seed, H = 30, R = 7, rough = 1) {
   const rnd = mulberry32(seed);
   let g = new THREE.CylinderGeometry(R * 0.55, R, H, 28, 22, false);
   g.deleteAttribute('uv'); g.deleteAttribute('normal');
@@ -348,9 +348,10 @@ export function spireGeometry(seed, H = 30, R = 7) {
     const t = (y + H / 2) / H;
     const a = Math.atan2(z, x);
     const rr = Math.hypot(x, z);
-    let k = 1 + 0.28 * noise3(Math.cos(a) * 1.6 + o, t * 2.5, Math.sin(a) * 1.6)
-      + 0.1 * noise3(Math.cos(a) * 6 + o, t * 0.6, Math.sin(a) * 6)
-      + 0.05 * noise3(Math.cos(a) * 3, t * 12 + o, Math.sin(a) * 3);
+    let k = 1 + 0.28 * rough * noise3(Math.cos(a) * 1.6 + o, t * 2.5, Math.sin(a) * 1.6)
+      + 0.1 * rough * noise3(Math.cos(a) * 6 + o, t * 0.6, Math.sin(a) * 6)
+      + 0.08 * rough * noise3(Math.cos(a) * 3, y * 0.35 + o, Math.sin(a) * 3)
+      + 0.06 * Math.max(0, Math.sin(y * 0.9 + o)) * rough;
     // bulges & ledges
     k *= 1 + 0.15 * Math.sin(t * 9 + o) * (1 - t);
     if (t > 0.97) k *= 0.6; // dome top
@@ -367,7 +368,7 @@ export function spireGeometry(seed, H = 30, R = 7) {
     const a = Math.atan2(z, x);
     const streak = noise3(Math.cos(a) * 8 + o, y * 0.04, Math.sin(a) * 8);
     let v = 0.78 + 0.32 * streak + 0.12 * noise3(x * 0.5, y * 0.5, z * 0.5);
-    let r = 0.5 * v, gg = 0.475 * v, b = 0.44 * v;
+    let r = 0.44 * v, gg = 0.415 * v, b = 0.38 * v;
     const m = smoothstep(0.4, 0.8, n.getY(i) + 0.2 * noise3(x * 0.4, y * 0.4 + o, z * 0.4));
     r += (0.28 - r) * m; gg += (0.44 - gg) * m; b += (0.16 - b) * m;
     const ao = 0.6 + 0.4 * smoothstep(0, H * 0.3, y);

@@ -13,9 +13,9 @@ const C = (hex) => new THREE.Color(hex);
 const COL = {
   sandDry: C(0xf0dcae), sandWet: C(0xcdb488), sandUnder: C(0xe6d6a8), seabed: C(0x7fa39a),
   reef: C(0x6b6a3e), reef2: C(0x8a5a4c),
-  grass1: C(0x5a9a34), grass2: C(0x3f8228), grass3: C(0x86a83a), jungle: C(0x2f6a22),
+  grass1: C(0x4c8a2c), grass2: C(0x376f22), grass3: C(0x7a9636), jungle: C(0x2a5e1e),
   dirt: C(0x94704a), dirtDark: C(0x6e5236),
-  rock: C(0x9a948a), rockDark: C(0x6f6a62), moss: C(0x5c7a34),
+  rock: C(0x8a8378), rockDark: C(0x5e5850), moss: C(0x4f6e2c),
 };
 
 export class Terrain {
@@ -23,8 +23,8 @@ export class Terrain {
     this.noise = makeNoise2D(seed);
     this.n2 = makeNoise2D(seed + 11);
     this.n3 = makeNoise2D(seed + 23);
-    this.mountain = { x: -18, z: -62, h: 58, s: 46 };
-    this.pond = { x: 26, z: 2, r: 11, y: 0 };
+    this.mountain = { x: -18, z: -62, h: 54, s: 52 };
+    this.pond = { x: 28, z: 14, r: 11, y: 0 };
     this.paths = [];
     this.heights = new Float32Array((GRID + 1) * (GRID + 1));
     this._generate();
@@ -44,7 +44,7 @@ export class Terrain {
     const px = x - qx, pz = z - qz;
     const t = px * dx + pz * dz;
     const lat = px * -dz + pz * dx;
-    return 13 * smoothstep(0, 6, t) * Math.exp(-(lat * lat) / (2 * 24 * 24));
+    return 9 * smoothstep(0, 5, t) * Math.exp(-(lat * lat) / (2 * 22 * 22));
   }
 
   rawHeight(x, z) {
@@ -218,8 +218,10 @@ export class Terrain {
     const dp = Math.hypot(x - this.pond.x, z - this.pond.z);
     if (dp < this.pond.r + 3) c.lerp(COL.dirtDark, 1 - smoothstep(this.pond.r, this.pond.r + 3, dp));
     // rock on slopes
-    const rock = smoothstep(0.3, 0.55, slope + n * 0.08);
-    t.copy(COL.rock).lerp(COL.rockDark, smoothstep(0, 0.7, n2 + n * 0.3));
+    const rock = smoothstep(0.34, 0.6, slope + n * 0.08);
+    const streak = this.n3(x * 0.25, h * 0.6) * 0.5 + 0.5;
+    t.copy(COL.rock).lerp(COL.rockDark, smoothstep(0.2, 0.9, streak * 0.7 + n2 * 0.3));
+    t.lerp(COL.moss, smoothstep(0.35, 0.8, this.n2(x * 0.08, z * 0.08)) * 0.55);
     c.lerp(t, rock);
     // sand
     t.copy(COL.sandDry).lerp(COL.sandWet, 1 - smoothstep(0.25, 0.9, h));
