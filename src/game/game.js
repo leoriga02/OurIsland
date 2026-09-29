@@ -765,7 +765,7 @@ export class Game {
     }
 
     this.updateSurvival(dt);
-    if (!this.progress.reachedPeak && P.pos.y > 28) { this.progress.reachedPeak = true; this.ui.center('What a view!', 'You climbed high into the peaks', 2500); }
+    if (!this.progress.reachedPeak && P.pos.y > 40) { this.progress.reachedPeak = true; this.ui.center('What a view!', 'You climbed high into the peaks', 2500); }
 
     // HUD
     this.updateWaypoint();

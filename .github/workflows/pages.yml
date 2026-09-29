@@ -25,7 +25,7 @@ jobs:
       - name: Prepare site (game files only)
         run: |
           mkdir -p _site
-          cp -r index.html style.css src vendor _site/
+          cp -r index.html style.css manifest.webmanifest src vendor _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
