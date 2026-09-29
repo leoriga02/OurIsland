@@ -1,0 +1,9 @@
+{
+  "name": "Our Island",
+  "short_name": "Our Island",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#06243a",
+  "theme_color": "#0b3a5c"
+}
