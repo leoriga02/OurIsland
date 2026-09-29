@@ -55,12 +55,22 @@
         <button data-tab="inv" class="tab active" aria-label="Inventory">🎒</button>
         <button data-tab="craft" class="tab" aria-label="Crafting">⚒</button>
         <button data-tab="build" class="tab" aria-label="Building">🏠</button>
+        <button data-tab="settings" class="tab" aria-label="Settings">⚙</button>
         <button id="panel-close" class="tab close" aria-label="Close">✕</button>
       </div>
       <div id="inv-box" class="box">
         <h2>Inventory</h2>
         <div id="inv-grid" class="grid"></div>
         <div id="inv-detail" class="detail"></div>
+      </div>
+      <div id="settings-box" class="box hidden">
+        <h2>Settings</h2>
+        <div class="set-row"><span>Sound effects</span><button class="pill" data-set="sfx"></button></div>
+        <div class="set-row"><span>Music</span><button class="pill" data-set="music"></button></div>
+        <div class="set-row"><span>Graphics</span><button class="pill" data-set="quality"></button></div>
+        <div class="set-row"><span>Camera auto-follow</span><button class="pill" data-set="follow"></button></div>
+        <div class="set-row"><span>Start a new island</span><button class="pill danger" data-set="reset">Reset</button></div>
+        <div class="set-note">Progress saves automatically.</div>
       </div>
       <div id="craft-box" class="box">
         <h2>Crafting</h2>

@@ -65,6 +65,7 @@ export class Audio {
   }
 
   _music(dt, night) {
+    if (this.musicOn === false) return;
     this.nextNote -= dt;
     if (this.nextNote > 0) return;
     const scale = night > 0.5 ? [220, 246.9, 293.7, 329.6, 392, 440] : [261.6, 293.7, 329.6, 392, 440, 523.3, 587.3];
@@ -81,7 +82,7 @@ export class Audio {
   update(dt, { coastDist = 0, night = 0, underCover = false } = {}) {
     if (!this.ctx) return;
     const near = Math.max(0, 1 - Math.max(0, coastDist) / 70);
-    this.surf.gain.setTargetAtTime(0.03 + near * 0.11, this.ctx.currentTime, 0.5);
+    this.surf.gain.setTargetAtTime(this.sfxOn === false ? 0 : 0.03 + near * 0.11, this.ctx.currentTime, 0.5);
     this._music(dt, night);
     this.nextBird -= dt;
     if (this.nextBird < 0) {
@@ -97,7 +98,7 @@ export class Audio {
   }
 
   tone(freq, dur, type = 'sine', vol = 0.2, slide = 0, delay = 0) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.sfxOn === false) return;
     const c = this.ctx, t = c.currentTime + delay;
     const o = c.createOscillator(); o.type = type;
     o.frequency.setValueAtTime(freq, t);
@@ -109,7 +110,7 @@ export class Audio {
   }
 
   hit(freq = 400, dur = 0.15, vol = 0.4, q = 1, type = 'bandpass') {
-    if (!this.ctx) return;
+    if (!this.ctx || this.sfxOn === false) return;
     const c = this.ctx, t = c.currentTime;
     const s = c.createBufferSource(); s.buffer = this.noise;
     s.playbackRate.value = 0.8 + Math.random() * 0.4;

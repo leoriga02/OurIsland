@@ -18,7 +18,7 @@ export class UI {
     $('btn-build').querySelector('.glyph').innerHTML = SVG.hammer;
     $('btn-jump').querySelector('.glyph').innerHTML = SVG.jump;
     const tabs = document.querySelectorAll('#tabs .tab');
-    tabs[0].innerHTML = SVG.bag; tabs[1].innerHTML = SVG.craft; tabs[2].innerHTML = SVG.house;
+    tabs[0].innerHTML = SVG.bag; tabs[1].innerHTML = SVG.craft; tabs[2].innerHTML = SVG.house; tabs[3].innerHTML = SVG.gear;
     this.hotbar = $('hotbar');
     this.toasts = $('toasts');
     this.quest = $('quest');
@@ -219,8 +219,11 @@ export class UI {
     const invBox = $('inv-box'), craftBox = $('craft-box');
     // inventory is always visible on wide screens next to crafting; on the inv tab show only inventory
     const wide = window.innerWidth > 900;
-    invBox.classList.toggle('hidden', this.tab !== 'inv' && !wide);
-    craftBox.classList.toggle('hidden', this.tab === 'inv');
+    const settings = this.tab === 'settings';
+    invBox.classList.toggle('hidden', settings || (this.tab !== 'inv' && !wide));
+    craftBox.classList.toggle('hidden', this.tab === 'inv' || settings);
+    $('settings-box').classList.toggle('hidden', !settings);
+    if (settings) { this._renderSettings(); return; }
     this._renderInv();
     if (this.tab === 'craft') this._renderCraft();
     if (this.tab === 'build') this._renderBuild();
@@ -258,6 +261,20 @@ export class UI {
     } else {
       det.innerHTML = `<b>Backpack</b>Slots 1–${HOTBAR} are your hotbar. Tap an item for details, then tap another slot to move it.`;
     }
+  }
+
+  _renderSettings() {
+    const s = this.g.settings;
+    const label = { sfx: s.sfx ? 'On' : 'Off', music: s.music ? 'On' : 'Off', quality: s.quality === 'high' ? 'High' : 'Low', follow: s.follow ? 'On' : 'Off' };
+    document.querySelectorAll('[data-set]').forEach((b) => {
+      const k = b.dataset.set;
+      if (label[k]) b.textContent = label[k];
+      b.onclick = () => {
+        if (k === 'reset') { if (confirm('Start over on a new island? Your progress will be lost.')) { this.g.clearSave(); this.g.noSave = true; location.reload(); } return; }
+        this.g.toggleSetting(k);
+        this._renderSettings();
+      };
+    });
   }
 
   _costHtml(cost) {

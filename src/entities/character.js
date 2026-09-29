@@ -127,7 +127,7 @@ export class Character {
       const d = new THREE.Vector3(Math.cos(a) * Math.cos(e), Math.sin(e), Math.sin(a) * Math.cos(e));
       if (d.z > 0.35 && e < 1.0) continue; // keep the face clear
       const t = mesh(sph(0.026 + hr() * 0.012, 7, 5), M.hair, d.x * 0.118, 0.118 + d.y * 0.112, d.z * 0.118 - 0.012, head);
-      t.lookAt(t.position.clone().add(d));
+      t.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d);
       t.scale.set(1.4, 1.1, 0.4);
     }
     const fringe = mesh(sph(0.05, 8, 6), M.hair, 0.025, 0.185, 0.075, head); fringe.scale.set(1.5, 0.45, 0.75); fringe.rotation.z = 0.35;

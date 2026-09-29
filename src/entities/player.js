@@ -157,7 +157,7 @@ export class CameraRig {
     // build mode: pull back and look down a bit for an overview
     this.buildBlend = damp(this.buildBlend || 0, this.building ? 1 : 0, 4, dt);
     // gentle auto-follow behind the player while moving
-    if (now - this.lastInput > 2200 && player.speed > 2.5 && !player.char.busy && !this.building) {
+    if (this.autoFollow !== false && now - this.lastInput > 2200 && player.speed > 2.5 && !player.char.busy && !this.building) {
       const want = player.facing + Math.PI;
       this.yaw = angleDamp(this.yaw, want, 0.9, dt);
     }

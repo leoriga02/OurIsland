@@ -21,6 +21,7 @@ THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality > 0, powerPreference: 'high-performance' });
 let pixelRatio = Math.min(window.devicePixelRatio, quality >= 2 ? 2 : 1.75);
+let maxRatio = pixelRatio;
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -49,6 +50,13 @@ async function boot() {
   const game = new Game({ renderer, scene, camera, quality, canvas });
   game.init();
   window.__game = game;
+  game.onQualityChange = (high) => {
+    const max = high ? Math.min(window.devicePixelRatio, quality >= 2 ? 2 : 1.75) : 1;
+    pixelRatio = Math.min(pixelRatio, max);
+    maxRatio = max;
+    renderer.setPixelRatio(pixelRatio); onResize();
+  };
+  game.applySettings();
 
   const startBtn = document.getElementById('btn-start');
   const newBtn = document.getElementById('btn-new');
@@ -88,7 +96,7 @@ async function boot() {
     if (fpsT > 3) {
       const fps = fpsN / fpsAcc;
       if (fps < 40 && pixelRatio > 1) { pixelRatio = Math.max(1, pixelRatio - 0.25); renderer.setPixelRatio(pixelRatio); onResize(); }
-      else if (fps > 58 && pixelRatio < Math.min(window.devicePixelRatio, 2) - 0.2 && quality >= 1) { pixelRatio += 0.1; renderer.setPixelRatio(pixelRatio); onResize(); }
+      else if (fps > 58 && pixelRatio < maxRatio - 0.05) { pixelRatio = Math.min(maxRatio, pixelRatio + 0.1); renderer.setPixelRatio(pixelRatio); onResize(); }
       fpsAcc = 0; fpsN = 0; fpsT = 0;
     }
     requestAnimationFrame(frame);

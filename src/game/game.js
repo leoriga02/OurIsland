@@ -37,6 +37,8 @@ export class Game {
     this.progress = { col: {}, crafted: {}, ate: {}, placed: { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0 }, felled: 0, drank: 0, slept: 0, reachedPeak: false };
     this.questIndex = 0;
     this.actionCooldown = 0;
+    this.settings = { sfx: true, music: true, quality: quality >= 1 ? 'high' : 'low', follow: true };
+    try { Object.assign(this.settings, JSON.parse(localStorage.getItem('ourisland-settings') || '{}')); } catch { /* ignore */ }
     this.target = null;
   }
 
@@ -91,6 +93,7 @@ export class Game {
     P.teleport(sp.x, sp.z, Math.PI);
     this.rig.yaw = 0;
     this.load();
+    this.applySettings();
     this.ui.renderHotbar();
     this.refreshHeld();
     this._torchFlame = null;
@@ -631,7 +634,7 @@ export class Game {
 
   // ---------------- save / load ----------------
   save() {
-    if (!this.started) return;
+    if (!this.started || this.noSave) return;
     try {
       const depleted = [];
       this.nature.all.forEach((r, i) => { if (!r.alive) depleted.push([i, Math.max(0, (r.respawnAt || 0) - this.time)]); });
@@ -642,6 +645,26 @@ export class Game {
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch (e) { /* storage unavailable */ }
+  }
+
+  toggleSetting(k) {
+    const s = this.settings;
+    if (k === 'quality') s.quality = s.quality === 'high' ? 'low' : 'high';
+    else s[k] = !s[k];
+    try { localStorage.setItem('ourisland-settings', JSON.stringify(s)); } catch { /* ignore */ }
+    this.applySettings();
+  }
+
+  applySettings() {
+    const s = this.settings;
+    this.audio.sfxOn = s.sfx; this.audio.musicOn = s.music;
+    this.rig.autoFollow = s.follow;
+    const high = s.quality === 'high';
+    if (this.renderer.shadowMap.enabled !== high) {
+      this.renderer.shadowMap.enabled = high;
+      this.scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
+    }
+    this.onQualityChange?.(high);
   }
 
   hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } }
