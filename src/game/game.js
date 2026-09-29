@@ -716,10 +716,12 @@ export class Game {
       }
     } else {
       // title-screen orbit
-      this.titleYaw = (this.titleYaw ?? 0.6) + dt * 0.05;
+      this.titleT = (this.titleT ?? 0) + dt;
+      this.titleYaw = 0.25 + Math.sin(this.titleT * 0.045) * 0.75; // sweep back and forth over the south coast
       const sp = this.terrain.spawn;
       const cx = sp.x - 5, cz = sp.z - 40;
-      this.camera.position.set(cx + Math.sin(this.titleYaw) * 90, 32, cz + Math.cos(this.titleYaw) * 90);
+      const x = cx + Math.sin(this.titleYaw) * 90, z = cz + Math.cos(this.titleYaw) * 90;
+      this.camera.position.set(x, Math.max(32, this.terrain.heightAt(x, z) + 18), z);
       this.camera.lookAt(cx, 8, cz);
       P.update(dt, { x: 0, y: 0, sprint: false, jump: false }, 0);
     }
