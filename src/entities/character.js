@@ -265,6 +265,10 @@ export class Character {
       this.body.rotation.x = 0;
     }
 
+    // holding a torch up
+    if (this.holdPose === 'torch' && B.swim < 0.5) {
+      aR.sh.rotation.x = -0.75 + Math.sin(t * 2) * 0.03; aR.sh.rotation.z = 0.35; aR.el.rotation.x = -0.9;
+    }
     // --- actions (upper body overrides) ---
     const A = this.action;
     if (A) {

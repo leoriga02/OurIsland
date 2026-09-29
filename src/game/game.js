@@ -48,6 +48,9 @@ export class Game {
     this.ocean = createOcean(heightTex); scene.add(this.ocean);
     this.pond = createPond(heightTex, this.terrain.pond); scene.add(this.pond);
     this.sky = new Sky(scene, { shadowSize: this.quality >= 2 ? 2048 : 1536 });
+    // soft fill light near the camera so the character stays readable at night
+    this.fill = new THREE.PointLight(0x9ab8ff, 0, 18, 1.5);
+    scene.add(this.fill);
     this.nature = new Nature(scene, this.terrain, { quality: this.quality });
     this.world = new World(this.terrain, this.nature);
     this.props = new Props(scene, this.terrain, this.nature, this.world);
@@ -158,6 +161,7 @@ export class Game {
     if (id === this._heldId) return;
     this._heldId = id;
     const c = this.player.char;
+    c.holdPose = id === 'torch' ? 'torch' : null;
     if (!id) { c.setHeld(null); this.fx.torch = null; return; }
     const m = itemMesh(id);
     m.scale.setScalar(1.4);
@@ -655,6 +659,8 @@ export class Game {
     }
 
     this.sky.update(dt, this.started ? P.pos : this.camera.position);
+    this.fill.position.copy(this.camera.position).add(new THREE.Vector3(0, 2, 0));
+    this.fill.intensity = this.sky.night * 9;
     this.sky.applyToWater(this.ocean.material); this.sky.applyToWater(this.pond.material);
     this.ocean.material.uniforms.uTime.value += dt;
     this.pond.material.uniforms.uTime.value += dt;
@@ -755,8 +761,9 @@ export class Game {
     const v = new THREE.Vector3(t.x, t.y, t.z).project(this.camera);
     const W = window.innerWidth, H = window.innerHeight;
     let x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
-    if (v.z > 1) { x = W - x; y = H - 40; }
-    x = clamp(x, 40, W - 40); y = clamp(y, 60, H - 90);
+    const behind = v.z > 1;
+    if (behind) { x = W - x; y = H * 0.62; }
+    x = clamp(x, 70, W - 90); y = clamp(y, 70, H - 120);
     this.ui.setWaypoint({ x, y }, d);
   }
 

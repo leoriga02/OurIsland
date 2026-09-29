@@ -38,6 +38,7 @@ export class Input {
     el.addEventListener('wheel', (e) => { this.zoom += Math.sign(e.deltaY) * 0.6; e.preventDefault(); }, opts);
 
     window.addEventListener('keydown', (e) => {
+      if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
       if (e.repeat) return;
       this.keys.add(e.code);
       if (e.code === 'Space') this.jumpPressed = true;
