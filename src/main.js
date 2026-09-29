@@ -96,7 +96,10 @@ async function boot() {
   $('btn-host').addEventListener('click', async () => {
     game.audio.unlock();
     begin();
-    try { await game.startCoop('host', makeRoomCode()); }
+    // reuse this device's last room code so a partner can reconnect after the host's page reloads
+    let code;
+    try { code = localStorage.getItem('ourisland-room') || makeRoomCode(); localStorage.setItem('ourisland-room', code); } catch { code = makeRoomCode(); }
+    try { await game.startCoop('host', code); }
     catch (e) { game.ui.toast(null, 'Co-op unavailable: ' + e.message, true); }
   });
   // join: reload into guest mode so the partner's world replaces this one cleanly

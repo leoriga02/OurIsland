@@ -74,7 +74,14 @@ export class Net {
     });
     this.peer.on('error', (err) => {
       const t = err.type || '';
-      if (t === 'unavailable-id') { this.h.onError?.('That room code is already in use.'); return; }
+      if (t === 'unavailable-id') {
+        // code taken (e.g. an old tab still open): pick a fresh one
+        this.code = makeRoomCode();
+        try { localStorage.setItem('ourisland-room', this.code); } catch { /* ignore */ }
+        try { this.peer.destroy(); } catch { /* ignore */ }
+        this.start();
+        return;
+      }
       if (t === 'peer-unavailable') { this.status('searching'); this.scheduleRetry(); return; }
       if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') { this.status('offline'); this.scheduleRetry(); return; }
       this.h.onError?.(err.message || String(err));

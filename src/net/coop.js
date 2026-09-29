@@ -261,9 +261,9 @@ export class Coop {
       r.facing = angleDamp(r.facing, s0.f, 14, dt);
     }
     if (!st) { r.char.root.visible = false; return; }
-    r.char.root.visible = true;
-    // stale partner (connection dropped): stand still, fade name tag
+    // stale partner (connection dropped): stand still, fade name tag, hide after a minute
     const stale = !this.connected && r.lostAt;
+    r.char.root.visible = !(stale && performance.now() - r.lostAt > 60000);
     if (stale) speed = 0;
     r.tag.material.opacity = stale ? 0.4 : 1;
     r.char.root.position.copy(r.pos);
