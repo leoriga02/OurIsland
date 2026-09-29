@@ -95,9 +95,9 @@ const frag = /* glsl */`
 
     // shore foam
     float fn = vnoise(p * 1.6 + vec2(t * 0.3, 0.0)) * 0.6 + vnoise(p * 4.0 - t * 0.5) * 0.4;
-    float shore = 1.0 - smoothstep(0.0, 0.1 + fn * 0.14, depth);
+    float shore = 1.0 - smoothstep(0.0, 0.05 + fn * 0.09, depth);
     float wave = sin(depth * 5.0 - t * 1.6 + fn * 3.0);
-    float band = smoothstep(0.86, 1.0, wave) * (1.0 - smoothstep(0.15, 0.9, depth)) * smoothstep(0.45, 0.65, fn);
+    float band = smoothstep(0.9, 1.0, wave) * (1.0 - smoothstep(0.08, 0.4, depth)) * smoothstep(0.5, 0.7, fn);
     float foam = clamp(max(shore, band * 0.8), 0.0, 1.0) * (1.0 - uPond * 0.6);
     col = mix(col, vec3(0.96, 0.98, 1.0) * (0.75 + 0.25 * diff), foam);
 

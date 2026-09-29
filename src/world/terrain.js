@@ -298,7 +298,7 @@ export class Terrain {
     const dp = Math.hypot(x - this.pond.x, z - this.pond.z);
     if (dp < this.pond.r + 3) c.lerp(COL.dirtDark, 1 - smoothstep(this.pond.r, this.pond.r + 3, dp));
     // rock on slopes
-    const onPeak = Math.max(smoothstep(1, 5, this.peakHeight(x, z)), this.coastDist(x, z) < -8 ? 1 : 0);
+    const onPeak = smoothstep(1, 5, this.peakHeight(x, z));
     const rock = Math.max(smoothstep(0.34, 0.6, slope + n * 0.08), onPeak * smoothstep(0.16, 0.36, slope + n * 0.06));
     const streak = this.n3(x * 0.25, h * 0.6) * 0.5 + 0.5;
     t.copy(COL.rock).lerp(COL.rockDark, smoothstep(0.2, 0.9, streak * 0.7 + n2 * 0.3));
