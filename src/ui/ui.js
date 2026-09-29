@@ -166,6 +166,38 @@ export class UI {
     $('clock').textContent = `Day ${day} · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
+  // heading: camera look direction angle (0 = north/-z, clockwise); quest: optional bearing of the objective
+  updateCompass(heading, quest) {
+    const key = heading.toFixed(3) + '|' + (quest == null ? '' : quest.toFixed(2));
+    if (key === this._compassKey) return;
+    this._compassKey = key;
+    const strip = this._strip || (this._strip = $('compass-strip'));
+    const W = strip.parentElement.clientWidth || 300;
+    const pxPerRad = W / 2.2;
+    if (!this._compassBuilt) {
+      this._compassBuilt = true;
+      const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      let html = '';
+      for (let k = -1; k <= 1; k++) {
+        for (let i = 0; i < 24; i++) {
+          const a = (i / 24) * Math.PI * 2 + k * Math.PI * 2;
+          const x = a * pxPerRad;
+          if (i % 3 === 0) html += `<div class="cl ${i % 6 ? 'minor' : ''}" style="left:${x}px">${names[i / 3]}</div>`;
+          else html += `<div class="ct" style="left:${x}px"></div>`;
+        }
+      }
+      html += '<div class="cq" id="compass-q">◆</div>';
+      strip.innerHTML = html;
+      this._cq = document.getElementById('compass-q');
+    }
+    let h = heading % (Math.PI * 2); if (h < 0) h += Math.PI * 2;
+    strip.style.transform = `translateX(${W / 2 - h * pxPerRad}px)`;
+    if (quest == null) { this._cq.style.display = 'none'; return; }
+    let d = quest - h; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    this._cq.style.display = Math.abs(d) < 1.1 ? 'block' : 'none';
+    this._cq.style.left = (h + d) * pxPerRad + 'px';
+  }
+
   drawMinimap(player, markers) {
     const c = this.mm, S = 168, R = 55; // view radius in meters
     c.save();

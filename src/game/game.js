@@ -769,6 +769,12 @@ export class Game {
 
     // HUD
     this.updateWaypoint();
+    {
+      const fwd = this.camera.getWorldDirection(new THREE.Vector3());
+      const heading = Math.atan2(fwd.x, -fwd.z);
+      const t = this._wpTarget;
+      this.ui.updateCompass(heading, t ? Math.atan2(t.x - P.pos.x, -(t.z - P.pos.z)) : null);
+    }
     this.ui.setStats(this.stats);
     this.ui.setQuest(this.currentQuest());
     this.hudT = (this.hudT || 0) - dt;

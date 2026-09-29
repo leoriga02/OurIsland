@@ -61,6 +61,16 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
 #quest.flash { animation: qflash 1s; }
 @keyframes qflash { 0% { background-color: rgba(232,176,74,0.5); } 100% {} }
 
+#compass { position: absolute; left: 50%; top: calc(8px + var(--safe-t)); width: 300px; height: 30px; transform: translateX(-50%); overflow: hidden; pointer-events: none !important;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent); mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  background: linear-gradient(90deg, rgba(10,16,22,0), rgba(10,16,22,0.45), rgba(10,16,22,0)); }
+#compass-strip { position: absolute; top: 0; left: 0; height: 100%; }
+#compass .ct { position: absolute; top: 4px; width: 1px; height: 7px; background: rgba(255,255,255,0.6); }
+#compass .cl { position: absolute; top: 9px; transform: translateX(-50%); font-weight: 800; font-size: 13px; color: #fff; text-shadow: 0 1px 2px #000; }
+#compass .cl.minor { font-size: 10px; color: #cfd6dc; top: 12px; }
+#compass .cq { position: absolute; top: 7px; transform: translateX(-50%); color: var(--gold-2); font-size: 12px; text-shadow: 0 0 6px rgba(255,200,90,0.9); }
+#compass .c-mark { position: absolute; left: 50%; top: 0; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--gold-2); transform: translateX(-50%); }
+@media (max-height: 430px) { #compass { width: 220px; } }
 #minimap-wrap { position: absolute; right: calc(14px + var(--safe-r)); top: calc(10px + var(--safe-t)); width: 124px; height: 124px; pointer-events: none; }
 #minimap { width: 124px; height: 124px; border-radius: 50%; border: 3px solid #2a3036; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.25), 0 4px 12px rgba(0,0,0,0.45); background: #0d4f8f; }
 #clock { position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; white-space: nowrap; }
