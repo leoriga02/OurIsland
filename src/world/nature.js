@@ -287,7 +287,7 @@ export class Nature {
       const idx = this.nodePools[v].add(_m);
       const col = this.addCollider(x, z, s * 0.9, y + s);
       this.occupy(x, z, s + 1);
-      this.addResource({ kind: 'node', x, z, y, r: s, hp: 5, maxHp: 5, pool: this.nodePools[v], idx, collider: col, label: 'Stone Boulder' });
+      this.addResource({ kind: 'node', x, z, y, r: s, hp: 5, maxHp: 5, pool: this.nodePools[v], idx, collider: col, label: 'Masso' });
     });
 
     // ---- palms ----
@@ -321,7 +321,7 @@ export class Nature {
       const idx = this.palmPools[v].add(_m, new THREE.Color().setHSL(0.13 + R() * 0.05, 0.25, 0.5 + R() * 0.12).multiplyScalar(1.9));
       const col = this.addCollider(x, z, 0.35 * s);
       this.occupy(x, z, 2.2);
-      this.addResource({ kind: 'palm', x, z, y, r: 0.4, hp: 4, maxHp: 4, pool: this.palmPools[v], variant: v, idx, collider: col, scale: s, rotY: -toSea, label: 'Palm Tree' });
+      this.addResource({ kind: 'palm', x, z, y, r: 0.4, hp: 4, maxHp: 4, pool: this.palmPools[v], variant: v, idx, collider: col, scale: s, rotY: -toSea, label: 'Palma' });
       palmCount++;
       // coconuts on the ground below some palms
       if (R() < 0.25) this._pickup('coconut', x + (R() - 0.5) * 3, z + (R() - 0.5) * 3);
@@ -343,7 +343,7 @@ export class Nature {
       const idx = this.junglePools[v].add(_m, new THREE.Color().setHSL(0.16 + R() * 0.1, 0.35, 0.45 + R() * 0.12).multiplyScalar(2.0));
       const col = this.addCollider(x, z, 0.45 * s);
       this.occupy(x, z, 3.5);
-      this.addResource({ kind: 'tree', x, z, y, r: 0.5, hp: 6, maxHp: 6, pool: this.junglePools[v], variant: v, idx, collider: col, scale: s, rotY: _e.y, label: 'Jungle Tree' });
+      this.addResource({ kind: 'tree', x, z, y, r: 0.5, hp: 6, maxHp: 6, pool: this.junglePools[v], variant: v, idx, collider: col, scale: s, rotY: _e.y, label: 'Albero della giungla' });
       if (R() < 0.5) this._pickup('stick', x + (R() - 0.5) * 5, z + (R() - 0.5) * 5);
     });
 
@@ -410,7 +410,7 @@ export class Nature {
       const s = 0.9 + R() * 0.3;
       _m.compose(_p.set(x, y - 0.05, z), _q, _s.set(s, s, s));
       const idx = fiberPool.add(_m);
-      this.addResource({ kind: 'fiber', x, z, y, r: 0.5, hp: 1, pool: fiberPool, idx, label: 'Fiber Plant' });
+      this.addResource({ kind: 'fiber', x, z, y, r: 0.5, hp: 1, pool: fiberPool, idx, label: 'Pianta da fibra' });
     });
 
     // ---- berry bushes ----
@@ -435,7 +435,7 @@ export class Nature {
       berryPool.add(_m, new THREE.Color(0.9, 1.05, 0.85));
       const idx = berryFruitPool.add(_m);
       this.occupy(x, z, 1.5);
-      this.addResource({ kind: 'berry', x, z, y, r: 1.1, hp: 1, pool: berryFruitPool, idx, label: 'Berry Bush' });
+      this.addResource({ kind: 'berry', x, z, y, r: 1.1, hp: 1, pool: berryFruitPool, idx, label: 'Cespuglio di bacche' });
     });
 
     // ---- pickups ----
@@ -484,7 +484,7 @@ export class Nature {
     _m.compose(_p.set(x, y + lift, z), _q, _s.set(s, s, s));
     const idx = pool.add(_m);
     if (idx < 0) return;
-    const labels = { stick: 'Stick', stone: 'Stone', coconut: 'Coconut', wood: 'Driftwood' };
+    const labels = { stick: 'Bastone', stone: 'Pietra', coconut: 'Cocco', wood: 'Legno trasportato' };
     this.addResource({ kind: 'pickup', item: id, x, z, y, r: 0.45, hp: 1, pool, idx, label: labels[id] });
   }
 

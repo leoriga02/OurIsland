@@ -19,7 +19,7 @@ function loadPeerJS() {
     const s = document.createElement('script');
     s.src = new URL('../../vendor/peerjs/peerjs.min.js', import.meta.url).href;
     s.onload = () => resolve(window.Peer || window.peerjs?.Peer);
-    s.onerror = () => reject(new Error('Could not load networking library'));
+    s.onerror = () => reject(new Error('Impossibile caricare la libreria di rete'));
     document.head.appendChild(s);
   });
   return peerLib;

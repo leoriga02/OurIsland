@@ -14,7 +14,7 @@ export class Crabs {
       m.scale.setScalar(1.6);
       m.castShadow = true;
       scene.add(m);
-      const crab = { mesh: m, x: 0, z: 0, y: 0, dir: Math.random() * 6, t: 0, hp: 2, alive: true, kind: 'crab', r: 0.4, label: 'Crab', speed: 0 };
+      const crab = { mesh: m, x: 0, z: 0, y: 0, dir: Math.random() * 6, t: 0, hp: 2, alive: true, kind: 'crab', r: 0.4, label: 'Granchio', speed: 0 };
       this.place(crab, i === 0);
       this.list.push(crab);
     }
