@@ -122,19 +122,22 @@ export function grassTexture() {
     const W = 128, H = 128;
     const c = canvas(W, H), g = c.getContext('2d');
     const r = mulberry32(5);
-    for (let i = 0; i < 38; i++) {
-      const x = 8 + r() * (W - 16);
-      const h = H * (0.45 + r() * 0.55);
-      const lean = (r() - 0.5) * 30;
-      const w = 2 + r() * 3;
-      const l = 30 + r() * 25;
+    for (let i = 0; i < 64; i++) { // slim blades, a few dry ones
+      const x = 6 + r() * (W - 12);
+      const h = H * (0.35 + r() * 0.62);
+      const lean = (r() - 0.5) * 34;
+      const w = 1 + r() * 1.8;
+      const l = 26 + r() * 22;
+      const dry = r() < 0.14;
+      const hue = dry ? 50 + r() * 10 : 80 + r() * 22, sat = dry ? 34 : 38 + r() * 12;
       const grd = g.createLinearGradient(0, H, 0, H - h);
-      grd.addColorStop(0, `hsl(95,50%,${l - 15}%)`);
-      grd.addColorStop(1, `hsl(${78 + r() * 20},55%,${l + 10}%)`);
+      grd.addColorStop(0, `hsl(${hue + 8},${sat}%,${l - 14}%)`);
+      grd.addColorStop(0.6, `hsl(${hue},${sat}%,${l + 2}%)`);
+      grd.addColorStop(1, `hsl(${hue - 6},${sat - 6}%,${l + (dry ? 20 : 12)}%)`);
       g.fillStyle = grd;
       g.beginPath();
-      g.moveTo(x - w, H); g.quadraticCurveTo(x + lean * 0.3, H - h * 0.5, x + lean, H - h);
-      g.quadraticCurveTo(x + lean * 0.3 + w * 0.5, H - h * 0.5, x + w, H);
+      g.moveTo(x - w, H); g.quadraticCurveTo(x + lean * 0.25, H - h * 0.55, x + lean, H - h);
+      g.quadraticCurveTo(x + lean * 0.25 + w * 0.6, H - h * 0.55, x + w, H);
       g.fill();
     }
     return tex(c);
@@ -150,8 +153,11 @@ export function fiberPlantTexture() {
       const x = W / 2 + (r() - 0.5) * 30;
       const h = H * (0.6 + r() * 0.4);
       const lean = (r() - 0.5) * 110;
-      const l = 45 + r() * 15;
-      g.strokeStyle = `hsl(${55 + r() * 20},45%,${l}%)`;
+      const l = 44 + r() * 12;
+      const grd = g.createLinearGradient(0, H, 0, H - h);
+      grd.addColorStop(0, `hsl(${82 + r() * 10},30%,${l - 16}%)`);
+      grd.addColorStop(1, `hsl(${48 + r() * 10},40%,${l + 6}%)`);
+      g.strokeStyle = grd;
       g.lineWidth = 2 + r() * 2;
       g.beginPath(); g.moveTo(x, H); g.quadraticCurveTo(x + lean * 0.2, H - h * 0.6, x + lean, H - h); g.stroke();
     }
@@ -275,9 +281,16 @@ export function rockDetailTexture() {
       const x = r() * S, y = r() * S, l = 20 + r() * 90, v = Math.floor(90 + r() * 80);
       wrapDraw(() => { g.strokeStyle = `rgba(${v},${v},${v},${0.25 + r() * 0.35})`; g.lineWidth = 1 + r() * 3; g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + (r() - 0.5) * 6, y + l * 0.3, x + (r() - 0.5) * 6, y + l * 0.6, x + (r() - 0.5) * 4, y + l); g.stroke(); });
     }
-    for (let i = 0; i < 22; i++) { // horizontal ledges / bedding planes
-      const y = r() * S, v = Math.floor(60 + r() * 50);
-      wrapDraw(() => { g.strokeStyle = `rgba(${v},${v},${v},0.55)`; g.lineWidth = 1 + r() * 2; g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= S; x += 16) g.lineTo(x, y + (r() - 0.5) * 5); g.stroke(); g.strokeStyle = 'rgba(245,245,245,0.35)'; g.beginPath(); g.moveTo(0, y + 2.5); g.lineTo(S, y + 2.5 + (r() - 0.5) * 4); g.stroke(); });
+    for (let i = 0; i < 40; i++) { // jagged fracture cracks, mostly steep
+      const x0 = r() * S, y0 = r() * S, v = Math.floor(50 + r() * 50);
+      wrapDraw(() => {
+        g.strokeStyle = `rgba(${v},${v},${v},0.6)`; g.lineWidth = 1 + r() * 1.5;
+        g.beginPath(); g.moveTo(x0, y0);
+        let x = x0, y = y0; const dir = (r() - 0.5) * 0.9;
+        for (let k = 0; k < 6; k++) { x += Math.sin(dir + (r() - 0.5) * 1.2) * 9; y += 6 + r() * 12; g.lineTo(x, y); }
+        g.stroke();
+        g.strokeStyle = 'rgba(240,240,240,0.25)'; g.beginPath(); g.moveTo(x0 + 2, y0); g.lineTo(x + 2, y); g.stroke();
+      });
     }
     return tex(c, { repeat: true, srgb: false });
   });

@@ -1,6 +1,6 @@
 // Procedural geometry builders for vegetation & rocks.
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, smoothstep, clamp } from '../util/noise.js';
 
 // ---------- helpers ----------
@@ -382,6 +382,51 @@ export function boulderGeometry(seed, { detail = 16, rough = 0.28, flat = 0.35, 
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(p.count * 2), 2));
+  return g;
+}
+
+// Tall fractured limestone block for cliff faces: vertical fluting, sheared facets, flat-shaded, mossy tops.
+export function cliffRockGeometry(seed, { detail = 18, tint = [0.62, 0.6, 0.55] } = {}) {
+  const rnd = mulberry32(seed);
+  let g = new THREE.SphereGeometry(1, detail, Math.round(detail * 0.9));
+  g.deleteAttribute('uv'); g.deleteAttribute('normal');
+  g = mergeVertices(g);
+  const p = g.attributes.position;
+  const o = rnd() * 100;
+  const planes = [];
+  for (let k = 0; k < 7; k++) { // mostly vertical fracture planes, one or two sloping tops
+    const top = k < 2;
+    const a = rnd() * Math.PI * 2;
+    const n = top ? new THREE.Vector3(Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5).normalize() : new THREE.Vector3(Math.cos(a), (rnd() - 0.5) * 0.25, Math.sin(a)).normalize();
+    planes.push({ n, d: top ? 0.55 + rnd() * 0.3 : 0.55 + rnd() * 0.3 });
+  }
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const ang = Math.atan2(z, x);
+    // vertical flutes: noise stretched along y
+    const d = 1 + 0.18 * fbm3(Math.cos(ang) * 2.2 + o, y * 0.5, Math.sin(ang) * 2.2 + o, 3) + 0.1 * noise3(Math.cos(ang) * 7 + o, y * 1.2, Math.sin(ang) * 7);
+    v.set(x * d, y, z * d);
+    for (const pl of planes) { const t = v.dot(pl.n) - pl.d; if (t > 0) v.addScaledVector(pl.n, -t * 0.92); }
+    // ledges: slight steps
+    v.x *= 1 + 0.05 * Math.sign(Math.sin(y * 5 + o)); v.z *= 1 + 0.05 * Math.sign(Math.sin(y * 5 + o));
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g = toCreasedNormals(g, 0.5); // crisp fracture edges, smooth flutes
+  const P = g.attributes.position, N = g.attributes.normal;
+  const col = new Float32Array(P.count * 3);
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    const streak = noise3(x * 5 + o, y * 0.7, z * 5);
+    let s = 0.9 + 0.22 * noise3(x * 2 + o, y * 2, z * 2) - Math.max(0, streak) * 0.35;
+    let r = tint[0] * s, gg = tint[1] * s, b = tint[2] * s;
+    const m = smoothstep(0.5, 0.85, N.getY(i) + noise3(x * 3, y * 3, z * 3 + o) * 0.3);
+    r += (0.3 - r) * m * 0.5; gg += (0.36 - gg) * m * 0.5; b += (0.2 - b) * m * 0.5;
+    const ao = 0.5 + 0.5 * smoothstep(-1, 0.3, y);
+    col[i * 3] = r * ao; col[i * 3 + 1] = gg * ao; col[i * 3 + 2] = b * ao;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(P.count * 2), 2));
   return g;
 }
 

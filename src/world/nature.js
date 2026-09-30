@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { materials } from './materials.js';
 import {
   palmGeometry, jungleTreeGeometry, bushGeometry, fernGeometry, bananaPlantGeometry, grassTuftGeometry,
-  fiberPlantGeometry, flowerGeometry, boulderGeometry, merge, setColor,
+  fiberPlantGeometry, flowerGeometry, boulderGeometry, cliffRockGeometry, merge, setColor,
 } from './models.js';
 import { itemGeometry, itemMaterial } from '../game/items.js';
 import { mulberry32, smoothstep, clamp } from '../util/noise.js';
@@ -232,6 +232,45 @@ export class Nature {
     this.sample(({ x, z, h, slope, pd, jw }) => h > 2 && pd > 3 && jw < 0.6 && pondOk(x, z, 4) && slope < 0.35 && this.free(x, z, 2), 6000)
       .slice(0, 70).forEach(({ x, z }) => { const sc = 0.6 + R() * 1.4; placeBoulder(x, z, sc, sc * 0.7); });
 
+    // ---- craggy cliff faces: fractured limestone columns half-sunk into every steep wall ----
+    const crGeos = [0, 1, 2, 3, 4].map((k) => cliffRockGeometry(900 + k * 17, { tint: k % 2 ? [0.5, 0.48, 0.44] : [0.56, 0.53, 0.48] }));
+    this.cliffPools = crGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.cliff }], 640, { near: 90, far: 700 }));
+    const wfDir = Math.atan2(T.mountain.z - P.z, T.mountain.x - P.x);
+    const wfX = P.x + Math.cos(wfDir) * (P.r + 4), wfZ = P.z + Math.sin(wfDir) * (P.r + 4);
+    const nearLandmark = (x, z) => Math.hypot(x - wfX, z - wfZ) < 8 || Math.hypot(x - T.cave.x, z - T.cave.z) < 13 || T.isInPond(x, z, 1);
+    const _n = new THREE.Vector3();
+    const cliffSpots = [];
+    for (let x = -470; x < 470; x += 2.5) for (let z = -470; z < 470; z += 2.5) { // scan the grid for cliff faces
+      const jx = x + (R() - 0.5) * 2.5, jz = z + (R() - 0.5) * 2.5;
+      if (T.heightAt(jx, jz) < 1.5) continue;
+      const sl = T.slopeAt(jx, jz);
+      if (sl < 0.36) continue;
+      cliffSpots.push({ x: jx, z: jz, sl });
+    }
+    for (let i = cliffSpots.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [cliffSpots[i], cliffSpots[j]] = [cliffSpots[j], cliffSpots[i]]; }
+    let nCliff = 0;
+    const cliffCap = this.quality > 0 ? 3000 : 1600;
+    for (const { x, z } of cliffSpots) {
+      if (nCliff >= cliffCap) break;
+      if (!this.free(x, z, 1.1) || nearLandmark(x, z) || T.pathDist(x, z) < 6) continue;
+      T.normalAt(x, z, _n);
+      const hl = Math.hypot(_n.x, _n.z) || 1, ox = _n.x / hl, oz = _n.z / hl; // outward (downhill)
+      // size the column to the local drop so it covers the face
+      const hUp = T.heightAt(x - ox * 5, z - oz * 5), hDn = Math.max(T.heightAt(x + ox * 5, z + oz * 5), -1);
+      const drop = hUp - hDn;
+      if (drop < 3) continue;
+      const sy = drop * (0.42 + R() * 0.2), sx = 2.4 + R() * 2.6 + drop * 0.08, sz = 1.8 + R() * 1.6;
+      const cx = x - ox * sz * 0.45, cz = z - oz * sz * 0.45;
+      const y = (hUp + hDn) * 0.5 - sy * 0.12;
+      _e.set((R() - 0.5) * 0.1, Math.atan2(ox, oz) + (R() - 0.5) * 0.6, (R() - 0.5) * 0.1, 'YXZ'); _q.setFromEuler(_e);
+      _m.compose(_p.set(cx, y, cz), _q, _s.set(sx, sy, sz));
+      this.cliffPools[Math.floor(R() * crGeos.length)].add(_m);
+      this.occupy(x, z, Math.min(sx, 4) * 0.36);
+      if (hDn > 0.5) this.addCollider(cx + ox * sz * 0.2, cz + oz * sz * 0.2, sz * 0.9, y + sy * 0.8);
+      nCliff++;
+    }
+    this.cliffCount = nCliff;
+
     // ---- mineable stone nodes ----
     const nodeGeos = [0, 1, 2].map((k) => boulderGeometry(700 + k, { rough: 0.35, flat: 0.25, moss: 0.25, tint: [0.66, 0.64, 0.62] }));
     this.nodePools = nodeGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 50, { near: 50, far: 300 }));
@@ -426,7 +465,7 @@ export class Nature {
     for (const o of this.occupied.map.values()) for (const c of o) if (c.r > 2.5 && c.r < 6) spots.push({ x: c.x, z: c.z, r: c.r * 1.3, k: 0.3 });
     if (T.mesh) T.bakeOcclusion(spots);
 
-    this.pools = [...this.fernPools, ...this.boulderPools, ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
+    this.pools = [...this.fernPools, ...this.boulderPools, ...this.cliffPools, ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
     for (const p of this.pools) p.finalize();
     this.cliffRocks = cliffRocks;
   }
@@ -480,8 +519,8 @@ export class Nature {
         _e.set(0, R() * 6, 0); _q.setFromEuler(_e);
         const s = 0.7 + R() * 0.7;
         _m.compose(_p.set(x, y - 0.03, z), _q, _s.set(s, s * (0.7 + R() * 0.6), s));
-        col.setHSL(0.18 + R() * 0.08, 0.3, 0.31 + R() * 0.13);
-        pool.add(_m, col.clone().multiplyScalar(1.6));
+        col.setHSL(0.2 + R() * 0.06, 0.2 + R() * 0.1, 0.34 + R() * 0.12);
+        pool.add(_m, col.clone().multiplyScalar(1.55));
       }
       pool.finalize();
       this.grassChunks.push({ pool, x: c.cx, z: c.cz });

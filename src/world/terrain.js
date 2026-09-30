@@ -19,10 +19,10 @@ const C = (hex) => new THREE.Color(hex);
 const COL = {
   sandDry: C(0xf0dcae), sandWet: C(0xcdb488), sandUnder: C(0xe6d6a8), seabed: C(0x7fa39a),
   reef: C(0x6b6a3e), reef2: C(0x8a5a4c),
-  grass1: C(0x4f7a2c), grass2: C(0x3f6a26), grass3: C(0x6d8736), jungle: C(0x365c22), litter: C(0x5a522c),
-  meadow: C(0x5b7f31), meadow2: C(0x6f8639), high: C(0x60803a),
+  grass1: C(0x587a34), grass2: C(0x476a2e), grass3: C(0x7c8a46), jungle: C(0x3b5628), litter: C(0x5e5432),
+  meadow: C(0x64803c), meadow2: C(0x7e8a48), high: C(0x66803f),
   dirt: C(0x94704a), dirtDark: C(0x6e5236),
-  rock: C(0xa39a8b), rockDark: C(0x6f675c), moss: C(0x56733a),
+  rock: C(0x9a9384), rockDark: C(0x5f5a52), moss: C(0x52693a),
 };
 
 const smax = (a, b, k) => { const h = clamp(0.5 + 0.5 * (a - b) / k, 0, 1); return lerp(b, a, h) + k * h * (1 - h); };

@@ -12,7 +12,8 @@ THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars
   `vec3 CustomToneMapping( vec3 color ) {
     vec3 c = ACESFilmicToneMapping( color );
     float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
-    c = mix( vec3( l ), c, 1.17 );
+    float gdom = smoothstep( 0.02, 0.22, c.g - max( c.r, c.b ) );
+    c = mix( vec3( l ), c, 1.1 - gdom * 0.24 );
     c = mix( c, c * c * ( 3.0 - 2.0 * c ), 0.2 );
     c += vec3( 0.02, 0.009, -0.012 ) * smoothstep( 0.35, 0.95, l );
     c += vec3( -0.012, 0.002, 0.02 ) * ( 1.0 - smoothstep( 0.0, 0.35, l ) );
