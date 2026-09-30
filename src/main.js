@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Game } from './game/game.js';
+import { makeRoomCode, normalizeCode } from './net/net.js';
 
 const params = new URLSearchParams(location.search);
 const isMobile = matchMedia('(pointer: coarse)').matches;
@@ -37,6 +38,7 @@ function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.fov = camera.aspect < 1.2 ? 72 : camera.aspect > 1.9 ? 55 : 60;
+  if (window.__game) window.__game.rig.baseFov = camera.fov;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', onResize);
@@ -47,7 +49,9 @@ const title = document.getElementById('title');
 
 async function boot() {
   await new Promise((r) => setTimeout(r, 30));
-  const game = new Game({ renderer, scene, camera, quality, canvas });
+  const joinCode = normalizeCode(params.get('join'));
+  const mode = joinCode.length === 5 ? 'guest' : 'solo';
+  const game = new Game({ renderer, scene, camera, quality, canvas, mode });
   game.init();
   window.__game = game;
   game.onQualityChange = (high) => {
@@ -58,30 +62,91 @@ async function boot() {
   };
   game.applySettings();
 
-  const startBtn = document.getElementById('btn-start');
-  const newBtn = document.getElementById('btn-new');
-  if (game.loaded) {
+  const $ = (id) => document.getElementById(id);
+  const startBtn = $('btn-start');
+  const newBtn = $('btn-new');
+  const show = (id) => { for (const m of ['menu-main', 'menu-join', 'menu-guest']) $(m).classList.toggle('hidden', m !== id); };
+  if (game.loaded && mode === 'solo') {
     startBtn.textContent = 'Continue';
     newBtn.classList.remove('hidden');
   }
-  document.getElementById('title-hint').textContent = isMobile
-    ? 'Left thumb: move (push to the edge to sprint) · Right thumb: look · Big button: act'
+  $('title-hint').textContent = isMobile
+    ? 'Left thumb: move · Right thumb: look · Hold » to sprint · Big button: act'
     : 'WASD move · Shift sprint · Space jump · E act · Drag mouse to look · Tab backpack · B build';
+
+  // character choice
+  const cards = document.querySelectorAll('.char-card');
+  const pickChar = (v) => { game.setCharacter(v); cards.forEach((c) => c.classList.toggle('sel', c.dataset.char === v)); };
+  cards.forEach((c) => {
+    c.querySelector('img').src = game.charIcons[c.dataset.char];
+    c.addEventListener('click', () => pickChar(c.dataset.char));
+  });
+  pickChar(game.settings.character);
+
   const begin = () => {
     title.classList.add('gone');
-    document.getElementById('hud').classList.remove('hidden');
+    $('hud').classList.remove('hidden');
     game.start();
     if (isMobile && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   };
   startBtn.addEventListener('click', begin);
-  newBtn.addEventListener('click', () => { game.clearSave(); location.reload(); });
+  newBtn.addEventListener('click', () => { if (confirm('Start over on a new island? Your progress will be lost.')) { game.clearSave(); game.noSave = true; location.reload(); } });
+
+  // host: open a room on this island and start playing right away
+  $('btn-host').addEventListener('click', async () => {
+    game.audio.unlock();
+    begin();
+    // reuse this device's last room code so a partner can reconnect after the host's page reloads
+    let code;
+    try { code = localStorage.getItem('ourisland-room') || makeRoomCode(); localStorage.setItem('ourisland-room', code); } catch { code = makeRoomCode(); }
+    try { await game.startCoop('host', code); }
+    catch (e) { game.ui.toast(null, 'Co-op unavailable: ' + e.message, true); }
+  });
+  // join: reload into guest mode so the partner's world replaces this one cleanly
+  $('btn-join').addEventListener('click', () => { show('menu-join'); setTimeout(() => $('join-code').focus(), 50); });
+  $('btn-join-back').addEventListener('click', () => show('menu-main'));
+  const goJoin = () => {
+    const code = normalizeCode($('join-code').value);
+    if (code.length !== 5) { $('join-code').focus(); return; }
+    game.save();
+    const q = new URLSearchParams(location.search); q.set('join', code); q.delete('autostart');
+    location.search = q.toString();
+  };
+  $('btn-join-go').addEventListener('click', goJoin);
+  $('join-code').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') goJoin(); });
+  $('join-code').addEventListener('input', (e) => { e.target.value = normalizeCode(e.target.value); });
+
+  if (mode === 'guest') {
+    show('menu-guest');
+    $('guest-label').textContent = `Join your partner's island · room ${joinCode}`;
+    const status = $('guest-status');
+    $('btn-guest-solo').addEventListener('click', () => { const q = new URLSearchParams(location.search); q.delete('join'); location.search = q.toString(); });
+    let joining = false;
+    const goGuest = async () => {
+      if (joining) return;
+      joining = true;
+      game.audio.unlock();
+      $('btn-guest-go').disabled = true;
+      status.textContent = 'Connecting…';
+      game.onCoopReady = () => { status.textContent = ''; begin(); };
+      game.onCoopStatus = (s) => {
+        if (game.started) return;
+        status.textContent = { connecting: 'Connecting…', searching: `Looking for room ${joinCode}… (is your partner's game open?)`, reconnecting: 'Retrying…', offline: 'No connection — retrying…', connected: 'Connected! Loading island…' }[s] || s;
+      };
+      try { await game.startCoop('guest', joinCode); }
+      catch (e) { status.textContent = 'Could not start co-op: ' + e.message; joining = false; $('btn-guest-go').disabled = false; }
+    };
+    $('btn-guest-go').addEventListener('click', goGuest);
+    if (params.has('autojoin')) goGuest();
+  }
   window.addEventListener('beforeunload', () => game.save());
   document.addEventListener('visibilitychange', () => { if (document.hidden) game.save(); });
 
   // compile shaders before revealing
   renderer.compile(scene, camera);
   loading.classList.add('gone');
-  if (params.has('autostart')) begin();
+  if (params.has('autostart') && mode === 'solo') begin();
+  if (params.has('autohost') && mode === 'solo') $('btn-host').click();
 
   let last = performance.now();
   let fpsAcc = 0, fpsN = 0, fpsT = 0;

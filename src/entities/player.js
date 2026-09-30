@@ -4,9 +4,9 @@ import { Character } from './character.js';
 import { damp, angleDamp, clamp, lerp } from '../util/noise.js';
 
 export class Player {
-  constructor(scene, world) {
+  constructor(scene, world, variant = 'm') {
     this.world = world;
-    this.char = new Character();
+    this.char = new Character(variant);
     scene.add(this.char.root);
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
@@ -45,8 +45,10 @@ export class Player {
     const waterY = W.waterLevel(this.pos.x, this.pos.z);
     const depth = waterY - terrainH;
     const groundH = W.groundHeight(this.pos.x, this.pos.z, this.pos.y);
-    const floorAboveWater = groundH > waterY - 1.0;
-    this.swimming = depth > 1.25 && !floorAboveWater;
+    const floorAboveWater = groundH > waterY - 1.2;
+    // hysteresis: start swimming at chest depth, stop once the feet touch bottom
+    this.swimming = !floorAboveWater && (this.swimming ? depth > 1.2 : depth > 1.4);
+    if (this.swimming !== this._wasSwimming) { this._wasSwimming = this.swimming; this.onWaterChange?.(this.swimming); }
 
     this.running = intent.sprint && mag > 0.3 && !this.swimming;
     let maxSpeed = this.swimming ? (intent.sprint ? 4.0 : 2.9) : this.running ? 7.4 : 4.4;
@@ -60,8 +62,9 @@ export class Player {
 
     // vertical
     if (this.swimming) {
-      const targetY = waterY - 1.02;
-      this.vel.y = damp(this.vel.y, (targetY - this.pos.y) * 4, 6, dt);
+      // float with the chest at the surface (head well above), gently bobbing
+      const targetY = waterY - (this.speed > 1 ? 1.32 : 1.24) + Math.sin(performance.now() / 700) * 0.03;
+      this.vel.y = damp(this.vel.y, (targetY - this.pos.y) * 5, 8, dt);
       this.grounded = false;
     } else {
       if (this.grounded && intent.jump && !busy) {
@@ -72,7 +75,17 @@ export class Player {
     }
 
     const nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
-    this.pos.x = nx; this.pos.z = nz;
+    // too steep to walk up (cliffs, karst towers): slide along or stop
+    const steep = (x, z) => {
+      const rise = W.groundHeight(x, z, this.pos.y) - this.pos.y;
+      const run = Math.hypot(x - this.pos.x, z - this.pos.z);
+      return rise > 0.25 && rise > run * 1.25 + 0.05;
+    };
+    if (!this.swimming && steep(nx, nz)) {
+      if (!steep(nx, this.pos.z)) { this.pos.x = nx; this.vel.z = 0; }
+      else if (!steep(this.pos.x, nz)) { this.pos.z = nz; this.vel.x = 0; }
+      else { this.vel.x = 0; this.vel.z = 0; }
+    } else { this.pos.x = nx; this.pos.z = nz; }
     this.pos.y += this.vel.y * dt;
     W.resolveCollisions(this.pos, this.radius);
 
@@ -163,7 +176,7 @@ export class CameraRig {
     }
     const t = this.target;
     const tx = player.pos.x, tz = player.pos.z;
-    const ty = player.pos.y + (player.swimming ? 1.25 : 1.55);
+    const ty = player.pos.y + (player.swimming ? 1.85 : 1.55);
     t.x = damp(t.x, tx, 14, dt); t.z = damp(t.z, tz, 14, dt); t.y = damp(t.y, ty, 8, dt);
     if (t.distanceToSquared(player.pos) > 400) t.set(tx, ty, tz);
 
@@ -195,10 +208,14 @@ export class CameraRig {
     this.curDist = d < this.curDist ? d : damp(this.curDist, d, 3, dt);
     const D = this.curDist;
     this.pos.set(base.x + ox * D, base.y + oy * D, base.z + oz * D);
-    const minY = Math.max(T.heightAt(this.pos.x, this.pos.z), this.world.waterLevel(this.pos.x, this.pos.z)) + 0.35;
+    const minY = Math.max(T.heightAt(this.pos.x, this.pos.z) + 0.35, this.world.waterLevel(this.pos.x, this.pos.z) + (player.swimming ? 0.9 : 0.45));
     if (this.pos.y < minY) this.pos.y = minY;
 
     this.camera.position.copy(this.pos);
+    // subtle FOV kick while sprinting
+    const baseFov = this.baseFov || (this.baseFov = this.camera.fov);
+    const wantFov = baseFov + (player.running && player.speed > 5 ? 5 : 0);
+    if (Math.abs(this.camera.fov - wantFov) > 0.05) { this.camera.fov = damp(this.camera.fov, wantFov, 5, dt); this.camera.updateProjectionMatrix(); }
     if (this.shakeT > 0) {
       this.shakeT -= dt;
       const a = this.shakeAmp * Math.max(0, this.shakeT) * 4;

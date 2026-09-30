@@ -1,13 +1,15 @@
 // Game orchestrator: world setup, interaction, survival, crafting, building, quests, save/load.
 import * as THREE from 'three';
 import { Terrain } from '../world/terrain.js';
-import { createOcean, createPond } from '../world/water.js';
+import { createOcean, createPond, setWaterIslands } from '../world/water.js';
+import { DistantIslands } from '../world/islands.js';
 import { Sky } from '../world/sky.js';
 import { Nature } from '../world/nature.js';
 import { World } from '../world/world.js';
 import { Props } from '../world/props.js';
 import { shared } from '../world/materials.js';
 import { Player, CameraRig } from '../entities/player.js';
+import { Character } from '../entities/character.js';
 import { Crabs } from '../entities/crabs.js';
 import { Birds } from '../entities/birds.js';
 import { Input } from '../input.js';
@@ -23,11 +25,13 @@ import { flameTexture } from '../util/textures.js';
 import { clamp } from '../util/noise.js';
 
 const SAVE_KEY = 'ourisland-save-v1';
+const GUEST_KEY = 'ourisland-guest-v1'; // a guest keeps their own backpack & progress; the world belongs to the host
 const REACH = { pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0 };
 
 export class Game {
-  constructor({ renderer, scene, camera, quality, canvas }) {
-    Object.assign(this, { renderer, scene, camera, quality, canvas });
+  constructor({ renderer, scene, camera, quality, canvas, mode = 'solo' }) {
+    Object.assign(this, { renderer, scene, camera, quality, canvas, mode });
+    this.coop = null;
     this.time = 0;
     this.selected = -1;
     this.panelOpen = false;
@@ -37,7 +41,7 @@ export class Game {
     this.progress = { col: {}, crafted: {}, ate: {}, placed: { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0 }, felled: 0, drank: 0, slept: 0, reachedPeak: false };
     this.questIndex = 0;
     this.actionCooldown = 0;
-    this.settings = { sfx: true, music: true, quality: quality >= 1 ? 'high' : 'low', follow: true };
+    this.settings = { sfx: true, music: true, quality: quality >= 1 ? 'high' : 'low', follow: true, character: mode === 'guest' ? 'f' : 'm', name: '' };
     try { Object.assign(this.settings, JSON.parse(localStorage.getItem('ourisland-settings') || '{}')); } catch { /* ignore */ }
     this.target = null;
   }
@@ -49,6 +53,8 @@ export class Game {
     const heightTex = this.terrain.buildHeightTexture();
     this.ocean = createOcean(heightTex); scene.add(this.ocean);
     this.pond = createPond(heightTex, this.terrain.pond); scene.add(this.pond);
+    this.distant = new DistantIslands(scene);
+    setWaterIslands(this.ocean.material, this.distant.waterData());
     this.sky = new Sky(scene, { shadowSize: this.quality >= 2 ? 2048 : 1536 });
     // soft fill light near the camera so the character stays readable at night
     this.fill = new THREE.PointLight(0x9ab8ff, 0, 18, 1.5);
@@ -60,7 +66,7 @@ export class Game {
     this.building = new Building(scene, this.world, this.fx);
     this.crabs = new Crabs(scene, this.terrain, 14);
     this.birds = new Birds(scene, 10);
-    this.player = new Player(scene, this.world);
+    this.player = new Player(scene, this.world, this.settings.character);
     this.rig = new CameraRig(this.camera, this.world);
     this.input = new Input(this.canvas);
     this.inv = new Inventory(24);
@@ -82,11 +88,18 @@ export class Game {
     P.onStep = (s) => this.audio.step(s);
     P.onJump = () => this.audio.swing();
     P.onLand = () => this.audio.step('sand');
-    P.onSwimStroke = () => { if (Math.random() < 0.5) this.audio.splash(); this.fx.burst('splash', P.pos.clone().add(new THREE.Vector3(0, 1.0, 0)), 3); };
+    P.onWaterChange = (inWater) => { if (inWater) { this.audio.splash(); this.fx.burst('splash', P.pos.clone().add(new THREE.Vector3(0, 1.3, 0)), 14); } };
+    P.onSwimStroke = () => { if (Math.random() < 0.5) this.audio.splash(); this.fx.burst('splash', P.pos.clone().add(new THREE.Vector3(0, 1.32, 0)).addScaledVector(P.forward, 0.5), 4); };
 
     // pre-render icons
     for (const id of Object.keys(ITEMS)) this.icons.item(id);
     for (const id of Object.keys(PIECES)) this.pieceIcon(id);
+    this.charIcons = {};
+    for (const v of ['m', 'f']) {
+      const ch = new Character(v);
+      ch.update(0.016, { speed: 0, grounded: true });
+      this.charIcons[v] = this.icons.render('char:' + v, ch.root, { rx: -0.08, ry: 0.35, pad: 1.02 });
+    }
     this.icons.dispose();
 
     const sp = this.terrain.spawn;
@@ -363,15 +376,18 @@ export class Game {
           if (t.kind === 'pickup') {
             this.give(o.item, 1, false, new THREE.Vector3(o.x, o.y + 0.1, o.z));
             this.nature.remove(o, 180, time);
+            this.emit('remove', { i: o.id, d: 180 });
             this.audio.pickup();
           } else if (t.kind === 'fiber') {
             this.give('fiber', 2 + (Math.random() < 0.4 ? 1 : 0), false, new THREE.Vector3(o.x, o.y + 0.6, o.z));
             this.nature.remove(o, 160, time);
+            this.emit('remove', { i: o.id, d: 160 });
             this.fx.burst('grass', new THREE.Vector3(o.x, o.y + 0.6, o.z), 10);
             this.audio.rustle();
           } else {
             this.give('berries', 2 + Math.floor(Math.random() * 2), false, new THREE.Vector3(o.x, o.y + 0.9, o.z));
             this.nature.remove(o, 200, time);
+            this.emit('remove', { i: o.id, d: 200 });
             this.fx.burst('berry', new THREE.Vector3(o.x, o.y + 0.9, o.z), 8);
             this.audio.rustle();
           }
@@ -391,7 +407,9 @@ export class Game {
           this.audio.chop();
           this.rig.shake(0.05, 0.15);
           this.nature.shake(o, 1, P.pos.x, P.pos.z);
+          if (o.hp > 0) this.emit('hit', { i: o.id, hp: o.hp, x: P.pos.x, z: P.pos.z });
           if (o.hp <= 0) {
+            this.emit('fell', { i: o.id, d: 300, x: P.pos.x, z: P.pos.z });
             o.alive = false;
             if (o.collider) o.collider.active = false;
             this.nature.fellTree(o, P.pos.x, P.pos.z, () => {
@@ -430,11 +448,13 @@ export class Game {
           this.audio.mine();
           this.rig.shake(0.05, 0.15);
           this.nature.shake(o, 0.6, P.pos.x, P.pos.z);
+          if (o.hp > 0) this.emit('hit', { i: o.id, hp: o.hp, x: P.pos.x, z: P.pos.z });
           this.give('stone', 1, false, hitAt);
           if (o.hp <= 0) {
             this.give('stone', 3, false, hitAt);
             this.fx.burst('dust', new THREE.Vector3(o.x, o.y + 0.4, o.z), 20);
             this.nature.remove(o, 240, time);
+            this.emit('remove', { i: o.id, d: 240 });
           }
         }, 0.55);
         this.actionCooldown = 0.7;
@@ -506,10 +526,20 @@ export class Game {
       this.save();
       return;
     }
+    this.emit('skip', {});
+    this.skipNight(false);
+  }
+
+  // Fade out and wake at dawn. In co-op, either player sleeping at night moves both to morning.
+  skipNight(fromPartner) {
+    if (this._skipping) return;
+    this._skipping = true;
+    if (fromPartner) this.ui.center('Your partner went to sleep…', '', 1500);
     const fade = document.getElementById('fade');
     fade.classList.add('on');
     this.player.frozen = true;
     setTimeout(() => {
+      this._skipping = false;
       if (this.sky.time > 0.5) this.sky.day++;
       this.sky.time = 0.27;
       this.stats.health = clamp(this.stats.health + 35, 0, 100);
@@ -540,6 +570,7 @@ export class Game {
     }
     this.inv.consume(cost);
     B.placePiece(piece, t, true);
+    this.emit('build', { type: piece, tg: { i: t.i, j: t.j, d: t.d, x: t.x, y: t.y, z: t.z, rot: t.rot, level: t.level } });
     this.audio.build();
     this.player.char.play('build', 0.5);
     this.rig.shake(0.04, 0.15);
@@ -635,6 +666,12 @@ export class Game {
   // ---------------- save / load ----------------
   save() {
     if (!this.started || this.noSave) return;
+    if (this.mode === 'guest') {
+      try {
+        localStorage.setItem(GUEST_KEY, JSON.stringify({ v: 1, stats: this.stats, progress: this.progress, questIndex: this.questIndex, inv: this.inv.toJSON(), selected: this.selected }));
+      } catch { /* storage unavailable */ }
+      return;
+    }
     try {
       const depleted = [];
       this.nature.all.forEach((r, i) => { if (!r.alive) depleted.push([i, Math.max(0, (r.respawnAt || 0) - this.time)]); });
@@ -667,13 +704,54 @@ export class Game {
     this.onQualityChange?.(high);
   }
 
+  setCharacter(v) {
+    if (v === this.settings.character) return;
+    this.settings.character = v;
+    try { localStorage.setItem('ourisland-settings', JSON.stringify(this.settings)); } catch { /* ignore */ }
+    // swap the player model, keeping position/animation state
+    const P = this.player, old = P.char;
+    const ch = new Character(v);
+    this.scene.remove(old.root);
+    this.scene.add(ch.root);
+    ch.root.position.copy(old.root.position); ch.root.rotation.copy(old.root.rotation);
+    P.char = ch;
+    this._heldId = undefined;
+    this.refreshHeld();
+  }
+
+  emit(type, data) { this.coop?.event(type, data); }
+
+  // Building quests count everything built on the island, by either player.
+  syncPlacedCounts() {
+    const c = this.building.counts(), pl = this.progress.placed;
+    for (const k of Object.keys(pl)) pl[k] = Math.max(pl[k], c[k] ?? 0);
+  }
+
+  async startCoop(role, code) {
+    const { Coop } = await import('../net/coop.js');
+    this.coop?.destroy();
+    this.coop = new Coop(this, role, code);
+    await this.coop.start();
+    return this.coop;
+  }
+
   hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } }
   clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
 
   load() {
     let d;
-    try { d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch { d = null; }
+    try { d = JSON.parse(localStorage.getItem(this.mode === 'guest' ? GUEST_KEY : SAVE_KEY) || 'null'); } catch { d = null; }
     if (!d || d.v !== 1) return false;
+    if (this.mode === 'guest') {
+      Object.assign(this.stats, d.stats);
+      this.progress = Object.assign(this.progress, d.progress);
+      this.progress.placed = Object.assign({ foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0 }, d.progress.placed);
+      this.questIndex = d.questIndex || 0;
+      this.inv.load(d.inv || []);
+      this.selected = d.selected ?? -1;
+      this.loaded = true;
+      return true;
+    }
     Object.assign(this.stats, d.stats);
     this.progress = Object.assign(this.progress, d.progress);
     this.progress.placed = Object.assign({ foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0 }, d.progress.placed);
@@ -685,7 +763,7 @@ export class Game {
     this.respawn = d.respawn || this.respawn;
     for (const [i, rem] of d.depleted || []) {
       const r = this.nature.all[i];
-      if (r) this.nature.remove(r, rem || 60, 0);
+      if (r) this.nature.removeInstant(r, rem || 60, 0);
     }
     if (d.player) this.player.teleport(d.player.x, d.player.z, d.player.f);
     this.rig.yaw = this.player.facing + Math.PI;
@@ -737,6 +815,7 @@ export class Game {
     this.birds.update(dt, this.sky.night);
     this.props.update(dt, this.time);
     this.building.animate(dt);
+    this.coop?.update(dt);
     // hide the roof over the player's head so the camera can see inside
     const here = this.building.cells.get(this.building.key(Math.floor(P.pos.x / 3), Math.floor(P.pos.z / 3)));
     const underRoof = here && here.roof && P.pos.y < here.level + 2;
@@ -785,7 +864,10 @@ export class Game {
       const markers = [{ x: this.terrain.pond.x, z: this.terrain.pond.z, color: '#4fc8ff', r: 6, glyph: '~' }];
       for (const p of this.building.placeables) markers.push({ x: p.x, z: p.z, color: p.type === 'campfire' ? '#ff8a2a' : '#e8b04a', r: 4 });
       for (const [k] of this.building.cells) { const [i, j] = k.split(',').map(Number); markers.push({ x: (i + 0.5) * 3, z: (j + 0.5) * 3, color: '#c89050', r: 3 }); }
+      const R = this.coop?.remote;
+      if (R && R.char.root.visible) markers.push({ x: R.pos.x, z: R.pos.z, color: '#ffd27a', r: 5.5, glyph: '' });
       this.ui.drawMinimap(P, markers);
+      this.ui.setPartner(this.coop);
       this.ui.setClock(this.sky.hours, this.sky.day);
     }
     // ambience
@@ -903,7 +985,10 @@ export class Game {
     this.intro = this.titleYaw !== undefined ? { t: 0, pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() } : null;
     this.audio.unlock();
     this.rig.target.copy(this.player.pos);
-    if (!this.loaded) {
+    if (this.mode === 'guest') {
+      this.intro = null;
+      setTimeout(() => this.ui.center("Your partner's island", 'Explore, gather and build together', 3500), 400);
+    } else if (!this.loaded) {
       this.rig.yaw = 0;
       this.player.char.play('wake', 3.2);
       this.player.frozen = true;

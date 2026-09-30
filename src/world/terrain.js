@@ -1,7 +1,7 @@
 // Island heightfield: generation, mesh, height queries, water-depth texture & minimap image.
 import * as THREE from 'three';
 import { makeNoise2D, fbm, smoothstep, clamp, lerp } from '../util/noise.js';
-import { grassDetailTexture, sandDetailTexture } from '../util/textures.js';
+import { grassDetailTexture, sandDetailTexture, rockDetailTexture } from '../util/textures.js';
 
 export const WORLD_SIZE = 560;
 export const GRID = 280;
@@ -15,7 +15,7 @@ const COL = {
   reef: C(0x6b6a3e), reef2: C(0x8a5a4c),
   grass1: C(0x4c8a2c), grass2: C(0x376f22), grass3: C(0x7a9636), jungle: C(0x2a5e1e),
   dirt: C(0x94704a), dirtDark: C(0x6e5236),
-  rock: C(0x8a8378), rockDark: C(0x5e5850), moss: C(0x4f6e2c),
+  rock: C(0xa39a8b), rockDark: C(0x6f675c), moss: C(0x4f6e2c),
 };
 
 export class Terrain {
@@ -25,6 +25,17 @@ export class Terrain {
     this.n3 = makeNoise2D(seed + 23);
     this.mountain = { x: -18, z: -62, h: 54, s: 52 };
     this.pond = { x: 28, z: 14, r: 11, y: 0 };
+    // limestone karst peaks, part of the heightfield so they blend into the land (x, z, radius, height)
+    this.peaks = [
+      [-40, -92, 14, 58], [-8, -110, 12, 48], [-62, -62, 12, 40], [16, -86, 10, 32], [-32, -44, 9, 26],
+      [-22, -72, 11, 40], [66, -116, 11, 34], [-96, -94, 11, 30], [-118, 26, 9, 24], [48, -96, 9, 24], [-78, -30, 9, 22],
+    ].map(([x, z, r, h]) => ({ x, z, r, h }));
+    // small rocky islets offshore (x, z, radius, peak height)
+    this.islets = [];
+    for (const [a, off, r, h] of [[0.95, 34, 12, 9], [2.3, 30, 10, 14], [3.3, 40, 14, 18], [4.1, 26, 8, 7], [5.0, 38, 13, 16], [5.9, 30, 9, 9]]) {
+      const cr = this.coastR(Math.cos(a) * 150, Math.sin(a) * 150) + off;
+      this.islets.push({ x: Math.cos(a) * cr, z: Math.sin(a) * cr, r, h });
+    }
     this.paths = [];
     this.heights = new Float32Array((GRID + 1) * (GRID + 1));
     this._generate();
@@ -67,7 +78,44 @@ export class Terrain {
     const mt = M.h * Math.exp(-(dx * dx + dz * dz) / (2 * M.s * M.s)) * (0.7 + 0.45 * ridge);
     h += mt * smoothstep(-12, 22, s);
     h += this._cliff(x, z) * smoothstep(5, 30, s);
+    h += this.peakHeight(x, z);
+    if (s < 12) h = Math.max(h, this.isletHeight(x, z));
     return Math.max(h, HT_MIN);
+  }
+
+  isletHeight(x, z) {
+    let best = -99;
+    for (const p of this.islets) {
+      const dx = x - p.x, dz = z - p.z;
+      const d = Math.hypot(dx, dz);
+      if (d > p.r * 2.5) continue;
+      const wob = 1 + 0.25 * this.n2(x * 0.08, z * 0.08);
+      const t = 1 - d / (p.r * wob);
+      let ih = -5 + smoothstep(-0.9, 0.25, t) * 6.4;
+      const dd = d / (p.r * 0.5 * wob);
+      ih += p.h / (1 + Math.pow(dd, 4)) * smoothstep(-0.2, 0.3, t);
+      best = Math.max(best, ih);
+    }
+    return best;
+  }
+
+  // Steep-sided, round-topped towers with lumpy outlines and weathered ledges.
+  peakHeight(x, z) {
+    let sum = 0;
+    for (const p of this.peaks) {
+      const dx = x - p.x, dz = z - p.z;
+      const d2 = dx * dx + dz * dz;
+      const R = p.r * 2.2;
+      if (d2 > R * R) continue;
+      const wob = 1 + 0.3 * this.n3(x * 0.07 + p.x, z * 0.07) + 0.12 * this.noise(x * 0.2, z * 0.2);
+      const d = Math.sqrt(d2) / (p.r * wob);
+      let f = 1 / (1 + Math.pow(d, 5));
+      f += 0.12 * Math.exp(-d * d * 3); // domed top
+      let hp = p.h * f;
+      hp += Math.sin(hp * 0.55 + this.noise(x * 0.1, z * 0.1) * 2) * 0.9 * smoothstep(0.1, 0.5, f) * (1 - smoothstep(0.85, 1, f)); // ledges
+      sum = Math.max(sum, hp);
+    }
+    return sum;
   }
 
   _pathDist(x, z) {
@@ -174,6 +222,7 @@ export class Terrain {
 
     const c = new THREE.Color(), t = new THREE.Color();
     const grassW = new Float32Array(N * N);
+    const rockW = new Float32Array(N * N);
     for (let k = 0; k < N * N; k++) {
       const x = pos[k * 3], h = pos[k * 3 + 1], z = pos[k * 3 + 2];
       this.colorAt(x, h, z, nrm[k * 3 + 1], c, t);
@@ -181,28 +230,40 @@ export class Terrain {
       const n = this.noise(x * 0.05, z * 0.05);
       const sandLine = 1.55 + n * 0.45;
       const slope = 1 - nrm[k * 3 + 1];
+      rockW[k] = h < 0.3 ? 0 : Math.max(smoothstep(0.3, 0.55, slope), smoothstep(1, 5, this.peakHeight(x, z)) * smoothstep(0.16, 0.36, slope));
       grassW[k] = h < 0.05 ? 0 : smoothstep(sandLine, sandLine + 0.9, h) * (1 - smoothstep(0.3, 0.55, slope)) * smoothstep(1.2, 2.6, this._pathDist(x, z));
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setAttribute('aGrass', new THREE.BufferAttribute(grassW, 1));
+    g.setAttribute('aRock', new THREE.BufferAttribute(rockW, 1));
 
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true, map: sandDetailTexture(), roughness: 0.93, metalness: 0,
     });
-    const grassTex = grassDetailTexture();
+    const grassTex = grassDetailTexture(), rockTex = rockDetailTexture();
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uGrassTex = { value: grassTex };
-      sh.vertexShader = 'attribute float aGrass;\nvarying float vGrass;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvGrass = aGrass;');
-      sh.fragmentShader = 'uniform sampler2D uGrassTex;\nvarying float vGrass;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
+      sh.uniforms.uRockTex = { value: rockTex };
+      sh.vertexShader = 'attribute float aGrass;\nattribute float aRock;\nvarying float vGrass;\nvarying float vRock;\nvarying vec3 vWPos;\nvarying vec3 vWN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvGrass = aGrass; vRock = aRock; vWPos = position; vWN = normal;');
+      sh.fragmentShader = 'uniform sampler2D uGrassTex;\nuniform sampler2D uRockTex;\nvarying float vGrass;\nvarying float vRock;\nvarying vec3 vWPos;\nvarying vec3 vWN;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
         float sd = texture2D(map, vMapUv * 1.3).r;
         vec4 gd = texture2D(uGrassTex, vMapUv * 1.6);
         float macro = texture2D(uGrassTex, vMapUv * 0.09).g;
         float grassD = gd.r * (0.82 + 0.36 * macro);
         float detail = mix(sd * (0.92 + 0.16 * macro), grassD, vGrass);
+        if (vRock > 0.01) {
+          // side-projected rock streaks on cliffs
+          vec3 an = abs(normalize(vWN));
+          float rx = texture2D(uRockTex, vec2(vWPos.z, -vWPos.y) * vec2(0.06, 0.09)).r;
+          float rz = texture2D(uRockTex, vec2(vWPos.x, -vWPos.y) * vec2(0.06, 0.09)).r;
+          float rk = mix(rz, rx, an.x / (an.x + an.z + 0.001));
+          rk *= 0.8 + 0.3 * texture2D(uRockTex, vec2(vWPos.x + vWPos.z, -vWPos.y) * 0.21).r;
+          detail = mix(detail, rk * 1.05, vRock);
+        }
         diffuseColor.rgb *= detail * 1.12;
       `);
     };
-    mat.customProgramCacheKey = () => 'terrain2';
+    mat.customProgramCacheKey = () => 'terrain3';
     const mesh = new THREE.Mesh(g, mat);
     mesh.receiveShadow = true;
     mesh.name = 'terrain';
@@ -237,7 +298,8 @@ export class Terrain {
     const dp = Math.hypot(x - this.pond.x, z - this.pond.z);
     if (dp < this.pond.r + 3) c.lerp(COL.dirtDark, 1 - smoothstep(this.pond.r, this.pond.r + 3, dp));
     // rock on slopes
-    const rock = smoothstep(0.34, 0.6, slope + n * 0.08);
+    const onPeak = smoothstep(1, 5, this.peakHeight(x, z));
+    const rock = Math.max(smoothstep(0.34, 0.6, slope + n * 0.08), onPeak * smoothstep(0.16, 0.36, slope + n * 0.06));
     const streak = this.n3(x * 0.25, h * 0.6) * 0.5 + 0.5;
     t.copy(COL.rock).lerp(COL.rockDark, smoothstep(0.2, 0.9, streak * 0.7 + n2 * 0.3));
     t.lerp(COL.moss, smoothstep(0.35, 0.8, this.n2(x * 0.08, z * 0.08)) * 0.55);

@@ -14,7 +14,6 @@ export class Props {
     this.world = world;
     this._wreck(nature);
     this._waterfall();
-    this._distant();
   }
 
   _wreck(nature) {
@@ -145,49 +144,6 @@ export class Props {
     }
     this.wfBase = new THREE.Vector3(bx, P.y, bz);
     this.waterfallPos = new THREE.Vector3(P.x + dx * midD, P.y + H / 2, P.z + dz * midD);
-  }
-
-  _distant() {
-    const M = this.M, scene = this.scene;
-    const r = mulberry32(21);
-    const hills = [], rocks = [], greens = [];
-    for (let k = 0; k < 9; k++) {
-      const a = (k / 9) * Math.PI * 2 + r() * 0.4;
-      const d = 700 + r() * 500;
-      const cx = Math.cos(a) * d, cz = Math.sin(a) * d;
-      const W = 60 + r() * 90;
-      // green hill base
-      const g = new THREE.SphereGeometry(1, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-      const p = g.attributes.position;
-      const col = new Float32Array(p.count * 3);
-      for (let i = 0; i < p.count; i++) {
-        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-        const n = noise3(x * 2 + k, y * 2, z * 2);
-        p.setY(i, y * (1 + n * 0.4));
-        const sand = y < 0.08;
-        col[i * 3] = sand ? 0.85 : 0.2 + n * 0.05; col[i * 3 + 1] = sand ? 0.78 : 0.4 + n * 0.08; col[i * 3 + 2] = sand ? 0.6 : 0.15;
-      }
-      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      g.scale(W, 18 + r() * 25, W * (0.6 + r() * 0.5));
-      g.rotateY(r() * 6);
-      g.translate(cx, -2, cz);
-      g.computeVertexNormals();
-      hills.push(g);
-      const n = 2 + Math.floor(r() * 4);
-      for (let i = 0; i < n; i++) {
-        const H = 50 + r() * 90, R = 12 + r() * 16;
-        const s = spireGeometry(900 + k * 10 + i, H, R);
-        const ox = cx + (r() - 0.5) * W * 1.1, oz = cz + (r() - 0.5) * W * 0.8;
-        s.rock.translate(ox, -3, oz);
-        s.green.translate(ox, -3, oz);
-        rocks.push(s.rock); greens.push(s.green);
-      }
-    }
-    const hillMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
-    const hm = new THREE.Mesh(merge(hills), hillMat);
-    const rm = new THREE.Mesh(merge(rocks), M.rock);
-    const gm = new THREE.Mesh(merge(greens), M.canopy);
-    scene.add(hm, rm, gm);
   }
 
   update(dt, time) {

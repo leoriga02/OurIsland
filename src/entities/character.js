@@ -28,16 +28,16 @@ function fabricTexture(base, speck, seed) {
   return t;
 }
 
-const mats = () => ({
-  skin: new THREE.MeshStandardMaterial({ color: 0x9e6c50, roughness: 0.58 }),
+const mats = (f) => ({
+  skin: new THREE.MeshStandardMaterial({ color: 0xb98263, roughness: 0.55 }),
   stubble: new THREE.MeshStandardMaterial({ color: 0x80563c, roughness: 0.8 }),
-  shirt: new THREE.MeshStandardMaterial({ color: 0xcdb994, roughness: 0.95 }),
-  shorts: new THREE.MeshStandardMaterial({ color: 0x534a3c, roughness: 0.95 }),
+  shirt: new THREE.MeshStandardMaterial({ color: f ? 0x4d4a46 : 0xcdb994, roughness: 0.95 }),
+  shorts: new THREE.MeshStandardMaterial({ color: f ? 0x56606a : 0x534a3c, roughness: 0.95 }),
   leather: new THREE.MeshStandardMaterial({ color: 0x6a4428, roughness: 0.75 }),
   pack: new THREE.MeshStandardMaterial({ color: 0x6b5034, roughness: 0.85 }),
   boot: new THREE.MeshStandardMaterial({ color: 0x4e3320, roughness: 0.7 }),
   sole: new THREE.MeshStandardMaterial({ color: 0x22180f, roughness: 0.9 }),
-  hair: new THREE.MeshStandardMaterial({ color: 0x2c1b10, roughness: 0.75 }),
+  hair: new THREE.MeshStandardMaterial({ color: f ? 0x4a2a16 : 0x2c1b10, roughness: 0.75 }),
   eye: new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: 0.3 }),
   roll: new THREE.MeshStandardMaterial({ color: 0x6f6a48, roughness: 0.95 }),
   metal: new THREE.MeshStandardMaterial({ color: 0x9a8a6a, roughness: 0.4, metalness: 0.7 }),
@@ -55,8 +55,12 @@ const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 6, 12);
 const sph = (r, w = 14, h = 10) => new THREE.SphereGeometry(r, w, h);
 
 export class Character {
-  constructor() {
-    const M = this.mats = mats();
+  // variant: 'm' (castaway in henley & cargo shorts) or 'f' (ponytail, crop tank, denim cutoffs)
+  constructor(variant = 'm') {
+    const F = variant === 'f';
+    this.variant = variant;
+    const M = this.mats = mats(F);
+    for (const k of ['skin', 'stubble', 'hair', 'eye']) M[k].userData.smooth = true;
     const root = this.root = new THREE.Group();
     const body = this.body = new THREE.Group(); // tilts for swimming
     root.add(body);
@@ -65,7 +69,7 @@ export class Character {
     body.add(hips);
 
     // pelvis / shorts
-    const pel = mesh(sph(1, 16, 12), M.shorts, 0, -0.02, 0, hips); pel.scale.set(0.185, 0.13, 0.13);
+    const pel = mesh(sph(1, 16, 12), M.shorts, 0, -0.02, 0, hips); pel.scale.set(F ? 0.18 : 0.185, 0.13, F ? 0.125 : 0.13);
     const belt = mesh(new THREE.TorusGeometry(0.172, 0.028, 8, 24), M.leather, 0, 0.07, 0, hips);
     belt.rotation.x = Math.PI / 2; belt.scale.set(1, 0.74, 1);
     mesh(new RoundedBoxGeometry(0.06, 0.05, 0.02, 2, 0.008), M.metal, 0, 0.07, 0.132, hips);
@@ -81,11 +85,22 @@ export class Character {
     const spine = this.spine = new THREE.Group();
     spine.position.y = 0.08;
     hips.add(spine);
-    const torso = mesh(cap(0.16, 0.26), M.shirt, 0, 0.24, 0, spine); torso.scale.set(1.18, 1, 0.74);
-    const chest = mesh(sph(1, 16, 12), M.shirt, 0, 0.36, 0.01, spine); chest.scale.set(0.215, 0.14, 0.135);
-    // henley collar
-    const collar = mesh(new THREE.TorusGeometry(0.07, 0.014, 6, 16), M.shirt, 0, 0.5, 0.0, spine); collar.rotation.x = Math.PI / 2;
-    mesh(new THREE.CylinderGeometry(0.052, 0.058, 0.11, 10), M.skin, 0, 0.53, 0, spine);
+    if (F) {
+      // bare midriff, crop tank top
+      mesh(cap(0.135, 0.22), M.skin, 0, 0.2, 0, spine).scale.set(1.1, 1, 0.72);
+      const top = mesh(cap(0.142, 0.14), M.shirt, 0, 0.36, 0, spine); top.scale.set(1.12, 1, 0.76);
+      const bust = mesh(sph(1, 16, 12), M.shirt, 0, 0.37, 0.03, spine); bust.scale.set(0.17, 0.1, 0.12);
+      for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(0.03, 0.12, 0.02), M.shirt, s * 0.09, 0.47, 0.04, spine);
+    } else {
+      const torso = mesh(cap(0.16, 0.26), M.shirt, 0, 0.24, 0, spine); torso.scale.set(1.18, 1, 0.74);
+      const chest = mesh(sph(1, 16, 12), M.shirt, 0, 0.36, 0.01, spine); chest.scale.set(0.215, 0.14, 0.135);
+      // henley collar
+      const collar = mesh(new THREE.TorusGeometry(0.07, 0.014, 6, 16), M.shirt, 0, 0.5, 0.0, spine); collar.rotation.x = Math.PI / 2;
+    }
+    // pendant necklace
+    const neck = mesh(new THREE.TorusGeometry(0.06, 0.005, 4, 16, Math.PI), M.leather, 0, 0.5, 0.045, spine); neck.rotation.set(Math.PI * 0.62, 0, Math.PI);
+    mesh(sph(0.012, 6, 5), M.metal, 0, 0.445, 0.085, spine);
+    mesh(new THREE.CylinderGeometry(F ? 0.045 : 0.052, 0.058, 0.11, 10), M.skin, 0, 0.53, 0, spine);
     // straps (front)
     for (const s of [-1, 1]) {
       const st = mesh(new THREE.BoxGeometry(0.045, 0.36, 0.015), M.leather, s * 0.1, 0.33, 0.118, spine);
@@ -109,8 +124,8 @@ export class Character {
     const head = this.head = new THREE.Group();
     head.position.y = 0.57;
     spine.add(head);
-    const skull = mesh(sph(0.108, 18, 14), M.skin, 0, 0.1, 0, head); skull.scale.set(0.92, 1.1, 1);
-    const jaw = mesh(sph(0.08, 14, 10), M.stubble, 0, 0.035, 0.022, head); jaw.scale.set(0.95, 0.8, 0.9);
+    const skull = mesh(sph(0.108, 18, 14), M.skin, 0, 0.1, 0, head); skull.scale.set(F ? 0.88 : 0.92, 1.1, 1);
+    const jaw = mesh(sph(0.08, 14, 10), F ? M.skin : M.stubble, 0, 0.035, 0.022, head); jaw.scale.set(F ? 0.82 : 0.95, 0.8, 0.9);
     mesh(sph(0.018, 8, 6), M.skin, 0, 0.085, 0.105, head).scale.set(0.9, 1.2, 1);
     for (const s of [-1, 1]) {
       mesh(sph(0.012, 8, 6), M.eye, s * 0.036, 0.113, 0.093, head);
@@ -131,21 +146,32 @@ export class Character {
       t.scale.set(1.4, 1.1, 0.4);
     }
     const fringe = mesh(sph(0.05, 8, 6), M.hair, 0.025, 0.185, 0.075, head); fringe.scale.set(1.5, 0.45, 0.75); fringe.rotation.z = 0.35;
+    if (F) {
+      // ponytail + loose strands framing the face
+      const tie = mesh(new THREE.TorusGeometry(0.025, 0.009, 5, 10), M.leather, 0, 0.16, -0.125, head); tie.rotation.x = 0.4;
+      for (let i = 0; i < 6; i++) {
+        const t = i / 5;
+        const pt = mesh(sph(0.045 - t * 0.022, 8, 6), M.hair, Math.sin(t * 2) * 0.012, 0.15 - t * 0.2, -0.14 - Math.sin(t * 1.4) * 0.05, head);
+        pt.scale.set(1, 1.5, 0.9);
+      }
+      for (const s of [-1, 1]) { const st = mesh(sph(0.03, 7, 5), M.hair, s * 0.085, 0.07, 0.07, head); st.scale.set(0.35, 1.9, 0.5); st.rotation.z = s * 0.15; }
+    }
 
     // arms
     this.arms = [];
     for (const s of [-1, 1]) {
       const sh = new THREE.Group();
-      sh.position.set(s * 0.215, 0.44, 0);
+      sh.position.set(s * (F ? 0.19 : 0.215), 0.44, 0);
       spine.add(sh);
-      mesh(sph(0.07, 12, 10), M.shirt, 0, -0.02, 0, sh).scale.set(1, 1, 0.95);
-      mesh(cap(0.066, 0.08), M.shirt, 0, -0.08, 0, sh);
-      mesh(cap(0.054, 0.2), M.skin, 0, -0.16, 0, sh);
+      mesh(sph(F ? 0.058 : 0.07, 12, 10), F ? M.skin : M.shirt, 0, -0.02, 0, sh).scale.set(1, 1, 0.95);
+      if (!F) mesh(cap(0.066, 0.08), M.shirt, 0, -0.08, 0, sh);
+      mesh(cap(F ? 0.046 : 0.054, 0.2), M.skin, 0, -0.16, 0, sh);
       mesh(sph(1, 10, 8), M.skin, 0, -0.15, 0.018, sh).scale.set(0.05, 0.085, 0.048);
       const el = new THREE.Group(); el.position.y = -0.29; sh.add(el);
       mesh(cap(0.044, 0.19), M.skin, 0, -0.12, 0, el);
       mesh(sph(1, 10, 8), M.skin, 0, -0.07, 0.006, el).scale.set(0.05, 0.08, 0.048);
       mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.045, 12), M.leather, 0, -0.2, 0, el);
+      if (s > 0) mesh(new RoundedBoxGeometry(0.04, 0.012, 0.04, 2, 0.005), M.metal, 0, -0.2, 0.048, el); // wristwatch
       const hand = new THREE.Group(); hand.position.y = -0.27; el.add(hand);
       mesh(sph(1, 10, 8), M.skin, 0, -0.03, 0.005, hand).scale.set(0.038, 0.058, 0.03);
       mesh(sph(1, 8, 6), M.skin, s * -0.025, -0.02, 0.025, hand).scale.set(0.015, 0.03, 0.015);
@@ -156,12 +182,19 @@ export class Character {
     // legs
     this.legs = [];
     for (const s of [-1, 1]) {
-      const hip = new THREE.Group(); hip.position.set(s * 0.098, -0.04, 0); hips.add(hip);
-      mesh(cap(0.087, 0.26), M.shorts, 0, -0.18, 0, hip);
-      mesh(new RoundedBoxGeometry(0.05, 0.11, 0.09, 2, 0.015), M.shorts, s * 0.085, -0.2, 0.0, hip);
-      const cuff = mesh(new THREE.CylinderGeometry(0.093, 0.09, 0.05, 14), M.shorts, 0, -0.34, 0, hip);
+      const hip = new THREE.Group(); hip.position.set(s * (F ? 0.09 : 0.098), -0.04, 0); hips.add(hip);
+      if (F) {
+        mesh(cap(0.083, 0.26), M.skin, 0, -0.2, 0, hip);
+        mesh(cap(0.088, 0.06), M.shorts, 0, -0.07, 0, hip);
+        mesh(new THREE.CylinderGeometry(0.09, 0.094, 0.035, 14), M.shorts, 0, -0.13, 0, hip);
+        if (s > 0) mesh(new THREE.TorusGeometry(0.086, 0.012, 5, 14), M.leather, 0, -0.2, 0, hip).rotation.x = Math.PI / 2; // thigh strap
+      } else {
+        mesh(cap(0.087, 0.26), M.shorts, 0, -0.18, 0, hip);
+        mesh(new RoundedBoxGeometry(0.05, 0.11, 0.09, 2, 0.015), M.shorts, s * 0.085, -0.2, 0.0, hip);
+        mesh(new THREE.CylinderGeometry(0.093, 0.09, 0.05, 14), M.shorts, 0, -0.34, 0, hip);
+      }
       const knee = new THREE.Group(); knee.position.y = -0.42; hip.add(knee);
-      mesh(cap(0.056, 0.27), M.skin, 0, -0.18, 0, knee);
+      mesh(cap(F ? 0.05 : 0.056, 0.27), M.skin, 0, -0.18, 0, knee);
       mesh(sph(1, 10, 8), M.skin, 0, -0.11, -0.018, knee).scale.set(0.064, 0.11, 0.062);
       mesh(sph(1, 8, 6), M.skin, 0, 0.0, 0.012, knee).scale.set(0.06, 0.06, 0.055);
       mesh(new THREE.CylinderGeometry(0.06, 0.058, 0.06, 12), new THREE.MeshStandardMaterial({ color: 0x8a8070, roughness: 1 }), 0, -0.3, 0, knee);
@@ -178,6 +211,7 @@ export class Character {
     this.root.traverse((o) => { if (o.isGroup || o === this.root) groups.push(o); });
     for (const g of groups) mergeChildren(g);
     this.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    if (F) this.root.scale.setScalar(0.95);
 
     // animation state
     this.phase = 0;
@@ -251,20 +285,30 @@ export class Character {
     // --- swimming ---
     if (B.swim > 0.01) {
       const w = B.swim;
-      const moving = clamp(s.speed / 2, 0, 1);
-      this.body.rotation.x = lerp(0, 1.2 * moving + 0.25, w);
-      const sp = ph * 1.0;
-      aL.sh.rotation.x = lerp(aL.sh.rotation.x, moving > 0.2 ? -Math.PI + ((sp % (Math.PI * 2)) - Math.PI) * 0.9 : Math.sin(t * 2) * 0.4 - 0.4, w);
-      aR.sh.rotation.x = lerp(aR.sh.rotation.x, moving > 0.2 ? -Math.PI + (((sp + Math.PI) % (Math.PI * 2)) - Math.PI) * 0.9 : Math.sin(t * 2 + 1) * 0.4 - 0.4, w);
-      aL.sh.rotation.z = lerp(aL.sh.rotation.z, moving > 0.2 ? -0.3 : -0.9, w); aR.sh.rotation.z = lerp(aR.sh.rotation.z, moving > 0.2 ? 0.3 : 0.9, w);
-      aL.el.rotation.x = lerp(aL.el.rotation.x, -0.3, w); aR.el.rotation.x = lerp(aR.el.rotation.x, -0.3, w);
-      const kick = Math.sin(t * 9) * 0.35 * (0.4 + moving);
-      lL.hip.rotation.x = lerp(lL.hip.rotation.x, kick, w); lR.hip.rotation.x = lerp(lR.hip.rotation.x, -kick, w);
-      lL.knee.rotation.x = lerp(lL.knee.rotation.x, 0.2, w); lR.knee.rotation.x = lerp(lR.knee.rotation.x, 0.2, w);
-      this.head.rotation.x = lerp(this.head.rotation.x, -1.0 * moving, w);
+      this.swimMove = lerp(this.swimMove || 0, clamp(s.speed / 2, 0, 1), 1 - Math.exp(-dt * 4));
+      const moving = this.swimMove;
+      // tilt forward around the chest (which stays at the water line) so the head never dips under
+      const tilt = lerp(0, 0.2 + 0.78 * moving, w);
+      const PIV = 1.4;
+      this.body.rotation.x = tilt;
+      this.body.position.set(0, PIV - PIV * Math.cos(tilt), -PIV * Math.sin(tilt));
+      const sp = ph;
+      // breaststroke: arms sweep forward and out; treading water: small sculling circles
+      const stroke = Math.sin(sp);
+      aL.sh.rotation.x = lerp(aL.sh.rotation.x, moving > 0.2 ? -2.2 + stroke * 0.7 : -0.55 + Math.sin(t * 2.4) * 0.3, w);
+      aR.sh.rotation.x = lerp(aR.sh.rotation.x, moving > 0.2 ? -2.2 + stroke * 0.7 : -0.55 + Math.sin(t * 2.4 + 1) * 0.3, w);
+      aL.sh.rotation.z = lerp(aL.sh.rotation.z, moving > 0.2 ? -0.35 - Math.max(0, -stroke) * 0.8 : -0.75 + Math.sin(t * 2.4) * 0.2, w);
+      aR.sh.rotation.z = lerp(aR.sh.rotation.z, moving > 0.2 ? 0.35 + Math.max(0, -stroke) * 0.8 : 0.75 - Math.sin(t * 2.4) * 0.2, w);
+      aL.el.rotation.x = lerp(aL.el.rotation.x, -0.35 - Math.max(0, stroke) * 0.6, w); aR.el.rotation.x = lerp(aR.el.rotation.x, -0.35 - Math.max(0, stroke) * 0.6, w);
+      const kick = Math.sin(t * (moving > 0.2 ? 8 : 4)) * 0.35 * (0.4 + moving);
+      lL.hip.rotation.x = lerp(lL.hip.rotation.x, kick - 0.1, w); lR.hip.rotation.x = lerp(lR.hip.rotation.x, -kick - 0.1, w);
+      lL.knee.rotation.x = lerp(lL.knee.rotation.x, 0.35 + Math.max(0, kick), w); lR.knee.rotation.x = lerp(lR.knee.rotation.x, 0.35 + Math.max(0, -kick), w);
+      this.head.rotation.x = lerp(this.head.rotation.x, -tilt * 0.85, w);
       this.spine.rotation.x = lerp(this.spine.rotation.x, 0, w);
+      this.hips.position.y = lerp(this.hips.position.y, 0.98 + Math.sin(t * 2) * 0.02, w);
     } else {
       this.body.rotation.x = 0;
+      this.body.position.set(0, 0, 0);
     }
 
     // holding a torch up
@@ -334,15 +378,18 @@ export class Character {
 }
 
 // One shared material: per-part colours live in vertex colours, a light fabric texture adds grain.
-let CHAR_MAT = null;
-function charMaterial() {
-  if (!CHAR_MAT) CHAR_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, map: fabricTexture('#ffffff', '40,30,20', 9), roughness: 0.82 });
-  return CHAR_MAT;
+let CHAR_MAT = null, SKIN_MAT = null;
+function charMaterial(smooth) {
+  if (!CHAR_MAT) {
+    CHAR_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, map: fabricTexture('#ffffff', '40,30,20', 9), roughness: 0.85 });
+    SKIN_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 });
+  }
+  return smooth ? SKIN_MAT : CHAR_MAT;
 }
 
 // Merge every mesh directly under a bone into a single draw call.
 function mergeChildren(group) {
-  const gs = [];
+  const sets = [[], []]; // [cloth, skin/hair]
   for (const c of [...group.children]) {
     if (!c.isMesh) continue;
     c.updateMatrix();
@@ -354,13 +401,15 @@ function mergeChildren(group) {
     const a = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) { a[i * 3] = col.r * 1.08; a[i * 3 + 1] = col.g * 1.08; a[i * 3 + 2] = col.b * 1.08; }
     g.setAttribute('color', new THREE.BufferAttribute(a, 3));
-    gs.push(g);
+    sets[c.material.userData.smooth ? 1 : 0].push(g);
     group.remove(c);
   }
-  if (!gs.length) return;
-  const m = new THREE.Mesh(gs.length > 1 ? mergeGeometries(gs) : gs[0], charMaterial());
-  m.castShadow = true; m.receiveShadow = true;
-  group.add(m);
+  sets.forEach((gs, k) => {
+    if (!gs.length) return;
+    const m = new THREE.Mesh(gs.length > 1 ? mergeGeometries(gs) : gs[0], charMaterial(k === 1));
+    m.castShadow = true; m.receiveShadow = true;
+    group.add(m);
+  });
 }
 
 const smooth = (x) => x * x * (3 - 2 * x);

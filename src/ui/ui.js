@@ -17,6 +17,7 @@ export class UI {
     $('btn-bag').querySelector('.glyph').innerHTML = SVG.bag;
     $('btn-build').querySelector('.glyph').innerHTML = SVG.hammer;
     $('btn-jump').querySelector('.glyph').innerHTML = SVG.jump;
+    $('btn-sprint').querySelector('.glyph').innerHTML = SVG.sprint;
     const tabs = document.querySelectorAll('#tabs .tab');
     tabs[0].innerHTML = SVG.bag; tabs[1].innerHTML = SVG.craft; tabs[2].innerHTML = SVG.house; tabs[3].innerHTML = SVG.gear;
     this.hotbar = $('hotbar');
@@ -38,13 +39,15 @@ export class UI {
     const g = this.g;
     const act = $('btn-action');
     const press = (el, on, off) => {
-      el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); el.classList.add('pressed'); g.audio.unlock(); on(); });
+      el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ } el.classList.add('pressed'); g.audio.unlock(); on(); });
       const up = (e) => { el.classList.remove('pressed'); off?.(); };
       el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('pointerleave', up);
       el.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     };
     press(act, () => { g.input.actionHeld = true; g.onActionPressed(); }, () => { g.input.actionHeld = false; });
     press($('btn-jump'), () => { g.input.jumpPressed = true; });
+    const sp = $('btn-sprint');
+    press(sp, () => { g.input.sprintHeld = true; sp.classList.add('on'); }, () => { g.input.sprintHeld = false; sp.classList.remove('on'); });
     press($('btn-build'), () => g.toggleBuild());
     press($('btn-bag'), () => this.openPanel(this._attn === 'bag' ? 'craft' : 'inv'));
     press($('bb-rotate'), () => g.building.rotate());
@@ -110,6 +113,54 @@ export class UI {
     const bar = el.querySelector('.hp');
     bar.style.display = hp == null ? 'none' : 'block';
     if (hp != null) bar.querySelector('i').style.width = hp * 100 + '%';
+  }
+
+  // ---------- co-op ----------
+  setCoopStatus(coop, state) {
+    const pill = $('coop-pill');
+    pill.classList.remove('hidden');
+    const text = pill.querySelector('.cp-text');
+    const code = `<span class="cp-code">${coop.code}</span>`;
+    const host = coop.role === 'host';
+    const msgs = {
+      connecting: host ? `Opening room ${code}…` : `Connecting to ${code}…`,
+      waiting: `Room ${code} · waiting for partner`,
+      searching: `Looking for room ${code}…`,
+      reconnecting: 'Reconnecting…',
+      offline: 'Offline — retrying…',
+      connected: host ? 'Partner connected' : `Playing on ${code}`,
+    };
+    text.innerHTML = msgs[state] || state;
+    pill.classList.toggle('on', state === 'connected');
+    pill.classList.toggle('off', state === 'offline' || state === 'reconnecting');
+    pill.querySelector('.cp-invite').classList.toggle('hidden', !host);
+    if (!pill._wired) {
+      pill._wired = true;
+      const inv = pill.querySelector('.cp-invite');
+      inv.addEventListener('pointerdown', (e) => e.stopPropagation());
+      inv.addEventListener('click', async () => {
+        const link = coop.net.inviteLink();
+        const text = `Join me on Our Island! Room code: ${coop.code}`;
+        try {
+          if (navigator.share) { await navigator.share({ title: 'Our Island', text, url: link }); return; }
+        } catch { /* cancelled */ }
+        try { await navigator.clipboard.writeText(link); this.toast(null, 'Invite link copied!'); }
+        catch { this.center(`Room code ${coop.code}`, 'Your partner taps Join Co-op and enters it', 4000); }
+      });
+    }
+    this.g.onCoopStatus?.(state);
+  }
+
+  setPartner(coop) {
+    const card = $('partner-card');
+    const r = coop?.remote;
+    if (!r) { card.classList.add('hidden'); return; }
+    card.classList.remove('hidden');
+    card.querySelector('.pc-name').textContent = '🤝 ' + (r.name || 'Partner');
+    card.querySelector('.bar i').style.width = (r.stats ? r.stats[0] : 100) + '%';
+    const P = this.g.player.pos;
+    const d = Math.round(Math.hypot(r.pos.x - P.x, r.pos.z - P.z));
+    card.querySelector('.pc-state').textContent = coop.connected ? (d > 8 ? `${d} m away` : 'nearby') : 'reconnecting…';
   }
 
   attention(what) {

@@ -26,7 +26,9 @@
       <div class="stat" id="st-water"><div class="ic">💧</div><div class="bar"><i></i></div></div>
       <div class="stat" id="st-food"><div class="ic">🍖</div><div class="bar"><i></i></div></div>
     </div>
+    <div id="partner-card" class="hidden"><div class="pc-name"></div><div class="bar"><i></i></div><div class="pc-state"></div></div>
     <div id="quest"></div>
+    <div id="coop-pill" class="hidden"><span class="cp-dot"></span><span class="cp-text"></span><button class="cp-invite pill small">Invite</button></div>
     <div id="compass"><div id="compass-strip"></div><div class="c-mark"></div></div>
     <div id="minimap-wrap"><canvas id="minimap" width="168" height="168"></canvas><div id="clock"></div></div>
     <div id="toasts"></div>
@@ -36,10 +38,13 @@
 
     <div id="hotbar"></div>
 
-    <button id="btn-bag" class="rbtn" aria-label="Backpack"><span class="glyph">🎒</span></button>
+    <div id="left-btns">
+      <button id="btn-bag" class="sqbtn" aria-label="Backpack"><span class="glyph">🎒</span></button>
+      <button id="btn-build" class="sqbtn" aria-label="Build"><span class="glyph">🔨</span></button>
+    </div>
     <div id="btn-cluster">
-      <button id="btn-build" class="rbtn small" aria-label="Build"><span class="glyph">🔨</span></button>
-      <button id="btn-jump" class="rbtn mid" aria-label="Jump"><span class="glyph">⤒</span></button>
+      <button id="btn-sprint" class="rbtn" aria-label="Sprint"><span class="glyph">»</span></button>
+      <button id="btn-jump" class="rbtn" aria-label="Jump"><span class="glyph">⤒</span></button>
       <button id="btn-action" class="rbtn big" aria-label="Action"><span class="glyph" id="action-glyph">✋</span><span id="action-label">Use</span></button>
     </div>
     <div id="build-bar" class="hidden">
@@ -88,9 +93,33 @@
   <div id="title">
     <div class="title-inner">
       <div class="logo"><span>OUR</span><span>ISLAND</span></div>
-      <div class="tag">Stranded. Survive. Build a home.</div>
-      <button id="btn-start" class="pill primary big">Tap to begin</button>
-      <button id="btn-new" class="pill hidden">New island</button>
+      <div class="tag">Stranded. Survive. Build a home — together.</div>
+      <div id="char-pick">
+        <button class="char-card" data-char="m"><img alt=""><span>Castaway</span></button>
+        <button class="char-card" data-char="f"><img alt=""><span>Explorer</span></button>
+      </div>
+      <div id="menu-main" class="menu">
+        <button id="btn-start" class="pill primary big">Play Solo</button>
+        <div class="menu-row">
+          <button id="btn-host" class="pill coop">Host Co-op</button>
+          <button id="btn-join" class="pill coop">Join Co-op</button>
+        </div>
+        <button id="btn-new" class="pill small hidden">New island</button>
+      </div>
+      <div id="menu-join" class="menu hidden">
+        <div class="menu-label">Enter your partner's room code</div>
+        <input id="join-code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" />
+        <div class="menu-row">
+          <button id="btn-join-go" class="pill primary">Join</button>
+          <button id="btn-join-back" class="pill">Back</button>
+        </div>
+      </div>
+      <div id="menu-guest" class="menu hidden">
+        <div class="menu-label" id="guest-label">Joining room</div>
+        <button id="btn-guest-go" class="pill primary big">Join Island</button>
+        <div id="guest-status" class="menu-status"></div>
+        <button id="btn-guest-solo" class="pill small">Play solo instead</button>
+      </div>
       <div class="hint" id="title-hint"></div>
     </div>
   </div>
