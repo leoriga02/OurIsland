@@ -299,6 +299,13 @@ export class Terrain {
     return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
   }
 
+  // terrain grass-cover weight (0 on sand, rock and paths), nearest grid vertex
+  grassAt(x, z) {
+    if (!this._arrays) return 1;
+    const i = Math.round((x + HALF) / CELL), j = Math.round((z + HALF) / CELL);
+    if (i < 0 || j < 0 || i > GRID || j > GRID) return 0;
+    return this._arrays.grassW[j * N + i];
+  }
   heightAt(x, z) {
     const fx = (x + HALF) / CELL, fz = (z + HALF) / CELL;
     if (fx < 0 || fz < 0 || fx >= GRID || fz >= GRID) return HT_MIN;

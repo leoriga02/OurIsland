@@ -234,7 +234,8 @@ export class Nature {
 
     // ---- craggy cliff faces: fractured limestone columns half-sunk into every steep wall ----
     const crGeos = [0, 1, 2, 3, 4].map((k) => cliffRockGeometry(900 + k * 17, { tint: k % 2 ? [0.5, 0.48, 0.44] : [0.56, 0.53, 0.48] }));
-    this.cliffPools = crGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.cliff }], 640, { near: 90, far: 700 }));
+    const crLow = [0, 1, 2, 3, 4].map((k) => cliffRockGeometry(900 + k * 17, { detail: 8, tint: k % 2 ? [0.5, 0.48, 0.44] : [0.56, 0.53, 0.48] }));
+    this.cliffPools = crGeos.map((g, k) => new Pool(scene, [{ geo: g, mat: M.cliff }], 640, { near: 80, far: 700, lod: [{ geo: crLow[k], mat: M.cliff }] }));
     const wfDir = Math.atan2(T.mountain.z - P.z, T.mountain.x - P.x);
     const wfX = P.x + Math.cos(wfDir) * (P.r + 4), wfZ = P.z + Math.sin(wfDir) * (P.r + 4);
     const nearLandmark = (x, z) => Math.hypot(x - wfX, z - wfZ) < 8 || Math.hypot(x - T.cave.x, z - T.cave.z) < 13 || T.isInPond(x, z, 1);
@@ -339,11 +340,12 @@ export class Nature {
       const y = T.heightAt(x, z) - 0.15;
       const s = 0.8 + R() * 0.45;
       _e.set(0, R() * 6, 0); _q.setFromEuler(_e);
-      _m.compose(_p.set(x, y, z), _q, _s.set(s, s, s));
+      const sy = s * (0.8 + R() * 0.55); // varied heights: squat understorey trees to tall emergents
+      _m.compose(_p.set(x, y, z), _q, _s.set(s, sy, s));
       const idx = this.junglePools[v].add(_m, new THREE.Color().setHSL(0.16 + R() * 0.1, 0.35, 0.45 + R() * 0.12).multiplyScalar(2.0));
       const col = this.addCollider(x, z, 0.45 * s);
       this.occupy(x, z, 3.5);
-      this.addResource({ kind: 'tree', x, z, y, r: 0.5, hp: 6, maxHp: 6, pool: this.junglePools[v], variant: v, idx, collider: col, scale: s, rotY: _e.y, label: 'Albero della giungla' });
+      this.addResource({ kind: 'tree', x, z, y, r: 0.5, hp: 6, maxHp: 6, pool: this.junglePools[v], variant: v, idx, collider: col, scale: s, scaleY: sy, rotY: _e.y, label: 'Albero della giungla' });
       if (R() < 0.5) this._pickup('stick', x + (R() - 0.5) * 5, z + (R() - 0.5) * 5);
     });
 
@@ -505,7 +507,7 @@ export class Nature {
         // meadows: thick in clearings, patchy elsewhere, thin under the jungle canopy
         const dens = (T.noise(px * 0.03, pz * 0.03) * 0.5 + 0.5) * (1 - T.jungleW(px, pz) * 0.7) * 0.85 + T.clearW(px, pz) * 0.15;
         if (R() > dens * 0.95 + 0.05) continue;
-        if (T.slopeAt(px, pz) > 0.26) continue;
+        if (T.slopeAt(px, pz) > 0.26 || T.grassAt(px, pz) < 0.6) continue;
         if (T.pathDist(px, pz) < 1.3 || T.isInPond(px, pz, 0.8)) continue;
         const key = Math.floor(px / CH) + ',' + Math.floor(pz / CH);
         let c = chunks.get(key);
@@ -607,6 +609,7 @@ export class Nature {
     const inner = new THREE.Group();
     inner.rotation.y = res.rotY || 0;
     inner.scale.setScalar(res.scale || 1);
+    if (res.scaleY) inner.scale.y = res.scaleY;
     pivot.add(inner);
     const a = new THREE.Mesh(v.trunk, isPalm ? this.M.palmBark : this.M.bark);
     const b = new THREE.Mesh(isPalm ? v.fronds : v.canopy, isPalm ? this.M.frond : this.M.canopy);
