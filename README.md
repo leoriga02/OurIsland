@@ -42,7 +42,7 @@ Progress autosaves to `localStorage`. On the title screen, **New island** resets
 
 ## Code map
 
-- `src/world/`: terrain heightfield, water shader, sky and day/night cycle, vegetation and rocks (instanced, with LOD), props, waterfall
+- `src/world/`: `layout.js` is the hand-designed island map (coastline, mountains, clearings, paths and ramps, landmarks), and `terrain.js` turns it into the heightfield. Also here: water shader, sky and day/night, biome-driven vegetation and rocks (instanced, with LOD), props (wreckage, waterfall, cave, sea arch, cairn) and distant islands
 - `src/entities/`: procedural character and animation, player controller and camera, crabs, seagulls
 - `src/game/`: items and recipes, inventory, building system, quests, and the game orchestrator (`game.js`)
 - `src/ui/`: HUD, panels and minimap. Item icons are rendered from the 3D models

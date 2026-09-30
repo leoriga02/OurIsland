@@ -29,7 +29,7 @@ export class UI {
     this.craftSel = 0;
     this.buildSel = 'foundation';
     this.mm = $('minimap').getContext('2d');
-    this.mapImg = game.terrain.buildMapImage(256);
+    this.mapImg = game.terrain.buildMapImage(384);
     this.actionKey = '';
     this.hotbarKey = '';
     this._wire();

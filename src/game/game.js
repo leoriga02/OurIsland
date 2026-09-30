@@ -24,7 +24,7 @@ import { IconFactory } from '../ui/icons.js';
 import { flameTexture } from '../util/textures.js';
 import { clamp } from '../util/noise.js';
 
-const SAVE_KEY = 'ourisland-save-v1';
+const SAVE_KEY = 'ourisland-save-v2'; // v2: Island 2.0 layout (v1 saves belong to the old island)
 const GUEST_KEY = 'ourisland-guest-v1'; // a guest keeps their own backpack & progress; the world belongs to the host
 const REACH = { pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0 };
 
@@ -294,6 +294,7 @@ export class Game {
       if (!silent) this.ui.toast(id, `+${n - left} ${ITEMS[id].name}`);
     }
     if (left > 0) this.ui.toast(null, 'Backpack full!', true);
+    this.checkQuest();
   }
 
   // ---------------- interaction ----------------

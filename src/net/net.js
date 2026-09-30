@@ -1,7 +1,7 @@
 // Two-player online co-op over WebRTC (PeerJS). The host's browser owns the world; the guest joins with a room code.
 // Signalling uses the free PeerJS cloud server by default (no setup). Gameplay data then flows peer-to-peer.
 
-const PREFIX = 'our-island-v1-';
+const PREFIX = 'our-island-v2-'; // bumped with the island layout so mismatched versions never connect
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export function makeRoomCode() {

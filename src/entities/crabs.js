@@ -22,10 +22,10 @@ export class Crabs {
 
   place(crab, nearSpawn = false) {
     const T = this.terrain;
-    for (let k = 0; k < 200; k++) {
+    for (let k = 0; k < 4000; k++) {
       let x, z;
       if (nearSpawn) { x = T.spawn.x + (Math.random() - 0.5) * 30; z = T.spawn.z + (Math.random() - 0.2) * 12; }
-      else { const a = Math.random() * Math.PI * 2; const r = T.coastR(Math.cos(a) * 150, Math.sin(a) * 150) - 4 - Math.random() * 8; x = Math.cos(a) * r; z = Math.sin(a) * r; }
+      else { x = (Math.random() * 2 - 1) * 440; z = (Math.random() * 2 - 1) * 440; if (T.coastDist(x, z) > 25 || T.rockyW(x, z) > 0.5) continue; }
       const h = T.heightAt(x, z);
       if (h > 0.25 && h < 1.6) { crab.x = x; crab.z = z; crab.y = h; crab.alive = true; crab.hp = 2; crab.mesh.visible = true; return; }
     }

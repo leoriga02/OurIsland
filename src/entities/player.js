@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { Character } from './character.js';
 import { damp, angleDamp, clamp, lerp } from '../util/noise.js';
 
+const _nrm = new THREE.Vector3();
+
 export class Player {
   constructor(scene, world, variant = 'm') {
     this.world = world;
@@ -67,7 +69,7 @@ export class Player {
       this.vel.y = damp(this.vel.y, (targetY - this.pos.y) * 5, 8, dt);
       this.grounded = false;
     } else {
-      if (this.grounded && intent.jump && !busy) {
+      if (this.grounded && intent.jump && !busy && !this.onSteep) {
         this.vel.y = 7.2; this.grounded = false;
         this.onJump?.();
       }
@@ -76,22 +78,34 @@ export class Player {
 
     const nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
     // too steep to walk up (cliffs, karst towers): slide along or stop
-    const steep = (x, z) => {
-      const rise = W.groundHeight(x, z, this.pos.y) - this.pos.y;
-      const run = Math.hypot(x - this.pos.x, z - this.pos.z);
-      return rise > 0.25 && rise > run * 1.25 + 0.05;
+    // cliffs: probe the terrain a little ahead; anything steeper than ~48 degrees blocks the way
+    // (building platforms are excluded, they have their own step-up logic)
+    const T = W.terrain, px = this.pos.x, pz = this.pos.z;
+    const ref = this.swimming ? Math.max(T.heightAt(px, pz), waterY - 1.1) : Math.max(T.heightAt(px, pz), this.pos.y);
+    const PROBE = 0.7;
+    const steepDir = (ux, uz) => {
+      const l = Math.hypot(ux, uz);
+      if (l < 1e-5) return false;
+      return T.heightAt(px + (ux / l) * PROBE, pz + (uz / l) * PROBE) - ref > PROBE * 1.1;
     };
-    if (!this.swimming && steep(nx, nz)) {
-      if (!steep(nx, this.pos.z)) { this.pos.x = nx; this.vel.z = 0; }
-      else if (!steep(this.pos.x, nz)) { this.pos.z = nz; this.vel.x = 0; }
+    const mvx = nx - px, mvz = nz - pz;
+    if (steepDir(mvx, mvz)) {
+      if (Math.abs(mvx) > 1e-4 && !steepDir(mvx, 0)) { this.pos.x = nx; this.vel.z = 0; }
+      else if (Math.abs(mvz) > 1e-4 && !steepDir(0, mvz)) { this.pos.z = nz; this.vel.x = 0; }
       else { this.vel.x = 0; this.vel.z = 0; }
     } else { this.pos.x = nx; this.pos.z = nz; }
+    // standing on a cliff face (e.g. after a jump): slide back down, no climbing by hopping
+    this.onSteep = false;
+    if (this.grounded && !this.swimming && this.pos.y - T.heightAt(this.pos.x, this.pos.z) < 0.1) {
+      const n = T.normalAt(this.pos.x, this.pos.z, _nrm);
+      if (n.y < 0.64) { this.onSteep = true; this.vel.x += n.x * 24 * dt; this.vel.z += n.z * 24 * dt; }
+    }
     this.pos.y += this.vel.y * dt;
     W.resolveCollisions(this.pos, this.radius);
 
     // keep inside the play area
     const r = Math.hypot(this.pos.x, this.pos.z);
-    if (r > 235) { this.pos.x *= 235 / r; this.pos.z *= 235 / r; }
+    if (r > 470) { this.pos.x *= 470 / r; this.pos.z *= 470 / r; }
 
     const g = W.groundHeight(this.pos.x, this.pos.z, this.pos.y);
     if (!this.swimming) {
