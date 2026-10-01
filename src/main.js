@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadAssets } from './world/assets.js';
 import { Game } from './game/game.js';
 import { makeRoomCode, normalizeCode } from './net/net.js';
 
@@ -52,6 +53,7 @@ async function boot() {
   await new Promise((r) => setTimeout(r, 30));
   const joinCode = normalizeCode(params.get('join'));
   const mode = joinCode.length === 5 ? 'guest' : 'solo';
+  await loadAssets();
   const game = new Game({ renderer, scene, camera, quality, canvas, mode });
   game.init();
   window.__game = game;

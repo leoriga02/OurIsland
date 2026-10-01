@@ -82,7 +82,7 @@ function buildIsland(seed, cx, cz, R, H, type = 'jungle', rot = 0) {
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.translate(cx, 0, cz);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  const mesh = new THREE.Mesh(geo, materials().scanIsland || new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
   return { mesh, trees, coastR: R };
 }
 

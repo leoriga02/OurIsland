@@ -167,7 +167,7 @@ export class Props {
     // sea arch off the east peninsula: visible across the bay from the start beach and the lookout
     const A = T.arch;
     const arch = archGeometry(3);
-    const rockMat = M.rock;
+    const rockMat = M.scanRock || M.rock;
     const am = shadowy(new THREE.Mesh(arch.rock, rockMat));
     const ag = shadowy(new THREE.Mesh(arch.green, M.canopy));
     for (const m of [am, ag]) { m.position.set(A.x, 0, A.z); m.rotation.y = A.rot; scene.add(m); }
@@ -228,7 +228,7 @@ export class Props {
       g.translate(p.x, floorY, p.z);
       frame.push(g);
     }
-    scene.add(shadowy(new THREE.Mesh(merge(frame), M.rock)));
+    scene.add(shadowy(new THREE.Mesh(merge(frame), M.scanRock || M.rock)));
     this.caveMouth = base;
 
     // stone cairn marking the lookout plateau
@@ -244,7 +244,7 @@ export class Props {
       y += s * 0.95;
       cairn.push(g);
     }
-    scene.add(shadowy(new THREE.Mesh(merge(cairn), M.rock)));
+    scene.add(shadowy(new THREE.Mesh(merge(cairn), M.scanRock || M.rock)));
     nature.addCollider(L.x, L.z, 0.7, ly + 3);
   }
 

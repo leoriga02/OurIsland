@@ -7,6 +7,26 @@ import {
 } from './models.js';
 import { itemGeometry, itemMaterial } from '../game/items.js';
 import { mulberry32, smoothstep, clamp } from '../util/noise.js';
+import { ASSETS } from './assets.js';
+
+// Scanned rock (Poly Haven boulder_01) seen from different sides gives several silhouettes from one asset.
+// mode 'boulder': x/z extent ±1, y from -0.3 to 1.1 (sits sunk into the ground); 'block': centred box ±1.
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+function scanRockVariants(mode) {
+  const rots = [[0, 0, 0], [Math.PI / 2, 0, 0.3], [Math.PI, 0.7, 0], [0.2, 0, Math.PI / 2], [-Math.PI / 2, 1.2, 0]];
+  return rots.map((r) => ['boulder', 'boulder_lod'].map((n) => {
+    const src = ASSETS.models[n][0];
+    const g = src.geo.clone();
+    g.rotateX(r[0]); g.rotateY(r[1]); g.rotateZ(r[2]);
+    g.computeBoundingBox();
+    const c = g.boundingBox.getCenter(_v1), sz = g.boundingBox.getSize(_v2);
+    g.translate(-c.x, -c.y, -c.z);
+    if (mode === 'boulder') { const w = Math.max(sz.x, sz.z); g.scale(2 / w, 1.4 / sz.y, 2 / w); g.translate(0, 0.4, 0); }
+    else g.scale(2 / sz.x, 2 / sz.y, 2 / sz.z);
+    g.computeBoundingSphere();
+    return { geo: g, mat: materials().scanRock };
+  }));
+}
 
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _e = new THREE.Euler();
@@ -203,14 +223,20 @@ export class Nature {
     const P = T.pond;
 
     // ---- boulders ----
-    const bVariants = [0, 1, 2, 3].map((k) => boulderGeometry(500 + k, { rough: 0.3, flat: 0.3, moss: 0.35, tint: [0.6, 0.56, 0.5] }));
-    this.boulderPools = bVariants.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 260, { near: 70, far: 420 }));
+    const SCAN = ASSETS.ok;
+    const rockTint = () => new THREE.Color().setRGB(0.88 + R() * 0.2, 0.88 + R() * 0.18, 0.86 + R() * 0.16);
+    if (SCAN) {
+      this.boulderPools = scanRockVariants('boulder').slice(0, 4).map(([hi, lo]) => new Pool(scene, [hi], 260, { near: 70, far: 420, lod: [lo] }));
+    } else {
+      const bVariants = [0, 1, 2, 3].map((k) => boulderGeometry(500 + k, { rough: 0.3, flat: 0.3, moss: 0.35, tint: [0.6, 0.56, 0.5] }));
+      this.boulderPools = bVariants.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 260, { near: 70, far: 420 }));
+    }
     const placeBoulder = (x, z, s, h, collide = true) => {
       const y = T.heightAt(x, z);
       _e.set((R() - 0.5) * 0.3, R() * 6, (R() - 0.5) * 0.3); _q.setFromEuler(_e);
       _s.set(s * (0.8 + R() * 0.4), h, s * (0.8 + R() * 0.4));
       _m.compose(_p.set(x, y + h * 0.15, z), _q, _s);
-      this.boulderPools[Math.floor(R() * 4)].add(_m);
+      this.boulderPools[Math.floor(R() * 4)].add(_m, SCAN ? rockTint() : null);
       if (collide) this.addCollider(x, z, s * 0.85, y + h * 1.1);
       this.occupy(x, z, s);
     };
@@ -233,9 +259,14 @@ export class Nature {
       .slice(0, 70).forEach(({ x, z }) => { const sc = 0.6 + R() * 1.4; placeBoulder(x, z, sc, sc * 0.7); });
 
     // ---- craggy cliff faces: fractured limestone columns half-sunk into every steep wall ----
-    const crGeos = [0, 1, 2, 3, 4].map((k) => cliffRockGeometry(900 + k * 17, { tint: k % 2 ? [0.5, 0.48, 0.44] : [0.56, 0.53, 0.48] }));
-    const crLow = [0, 1, 2, 3, 4].map((k) => cliffRockGeometry(900 + k * 17, { detail: 8, tint: k % 2 ? [0.5, 0.48, 0.44] : [0.56, 0.53, 0.48] }));
-    this.cliffPools = crGeos.map((g, k) => new Pool(scene, [{ geo: g, mat: M.cliff }], 640, { near: 80, far: 700, lod: [{ geo: crLow[k], mat: M.cliff }] }));
+    if (SCAN) {
+      // far LOD: a ~90-triangle fractured block with the same triplanar scan material
+      this.cliffPools = scanRockVariants('block').map(([hi], k) => new Pool(scene, [hi], 640, { near: this.quality >= 2 ? 60 : 50, far: 700, lod: [{ geo: cliffRockGeometry(900 + k * 17, { detail: 7 }), mat: M.scanRock }] }));
+    } else {
+      const crGeos = [0, 1, 2, 3, 4].map((k) => cliffRockGeometry(900 + k * 17, { tint: k % 2 ? [0.5, 0.48, 0.44] : [0.56, 0.53, 0.48] }));
+      const crLow = [0, 1, 2, 3, 4].map((k) => cliffRockGeometry(900 + k * 17, { detail: 8, tint: k % 2 ? [0.5, 0.48, 0.44] : [0.56, 0.53, 0.48] }));
+      this.cliffPools = crGeos.map((g, k) => new Pool(scene, [{ geo: g, mat: M.cliff }], 640, { near: 80, far: 700, lod: [{ geo: crLow[k], mat: M.cliff }] }));
+    }
     const wfDir = Math.atan2(T.mountain.z - P.z, T.mountain.x - P.x);
     const wfX = P.x + Math.cos(wfDir) * (P.r + 4), wfZ = P.z + Math.sin(wfDir) * (P.r + 4);
     const nearLandmark = (x, z) => Math.hypot(x - wfX, z - wfZ) < 8 || Math.hypot(x - T.cave.x, z - T.cave.z) < 13 || T.isInPond(x, z, 1);
@@ -250,31 +281,55 @@ export class Nature {
     }
     for (let i = cliffSpots.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [cliffSpots[i], cliffSpots[j]] = [cliffSpots[j], cliffSpots[i]]; }
     let nCliff = 0;
-    const cliffCap = this.quality > 0 ? 3000 : 1600;
+    const cliffCap = SCAN ? (this.quality >= 2 ? 1400 : 1000) : this.quality > 0 ? 3000 : 1600;
     for (const { x, z } of cliffSpots) {
       if (nCliff >= cliffCap) break;
-      if (!this.free(x, z, 1.1) || nearLandmark(x, z) || T.pathDist(x, z) < 6) continue;
+      if (!this.free(x, z, SCAN ? 1.8 : 1.1) || nearLandmark(x, z) || T.pathDist(x, z) < 6) continue;
       T.normalAt(x, z, _n);
       const hl = Math.hypot(_n.x, _n.z) || 1, ox = _n.x / hl, oz = _n.z / hl; // outward (downhill)
       // size the column to the local drop so it covers the face
       const hUp = T.heightAt(x - ox * 5, z - oz * 5), hDn = Math.max(T.heightAt(x + ox * 5, z + oz * 5), -1);
       const drop = hUp - hDn;
       if (drop < 3) continue;
-      const sy = drop * (0.42 + R() * 0.2), sx = 2.4 + R() * 2.6 + drop * 0.08, sz = 1.8 + R() * 1.6;
+      const sy = drop * (0.42 + R() * 0.2), sx = (SCAN ? 3.4 + R() * 3.6 : 2.4 + R() * 2.6) + drop * 0.08, sz = (SCAN ? 2.4 : 1.8) + R() * 1.6;
       const cx = x - ox * sz * 0.45, cz = z - oz * sz * 0.45;
       const y = (hUp + hDn) * 0.5 - sy * 0.12;
       _e.set((R() - 0.5) * 0.1, Math.atan2(ox, oz) + (R() - 0.5) * 0.6, (R() - 0.5) * 0.1, 'YXZ'); _q.setFromEuler(_e);
       _m.compose(_p.set(cx, y, cz), _q, _s.set(sx, sy, sz));
-      this.cliffPools[Math.floor(R() * crGeos.length)].add(_m);
+      this.cliffPools[Math.floor(R() * this.cliffPools.length)].add(_m, SCAN ? rockTint() : null);
       this.occupy(x, z, Math.min(sx, 4) * 0.36);
       if (hDn > 0.5) this.addCollider(cx + ox * sz * 0.2, cz + oz * sz * 0.2, sz * 0.9, y + sy * 0.8);
       nCliff++;
     }
     this.cliffCount = nCliff;
 
+    // ---- scanned coastal rock shelves: half-submerged reef rock along the rocky shores ----
+    if (SCAN) {
+      const parts = (n) => ASSETS.models[n].map((v) => ({ geo: v.geo, mat: M.scanRock }));
+      this.shelfPool = new Pool(scene, parts('coast_rocks'), 40, { near: 60, far: 650, lod: parts('coast_rocks_lod') });
+      const shelfSpots = this.sample(({ x, z, s, rk }) => Math.abs(s - 2) < 3 && rk > 0.45 && !this.nearSpawn(x, z, 60), 60000);
+      const placed = [];
+      for (const { x, z } of shelfSpots) {
+        if (placed.length >= 26) break;
+        if (placed.some((q) => Math.hypot(q.x - x, q.z - z) < 38)) continue;
+        const sea = T.seaward(x, z);
+        const sc = 0.32 + R() * 0.22;
+        _e.set(0, -sea + Math.PI / 2 + (R() - 0.5) * 0.8, 0); _q.setFromEuler(_e);
+        // centre a little out to sea so the shelf runs from the foot of the cliff into the surf
+        const px = x + Math.cos(sea) * 5, pz = z + Math.sin(sea) * 5;
+        _m.compose(_p.set(px, -1.1, pz), _q, _s.set(sc, sc * (1.6 + R() * 1.2), sc));
+        this.shelfPool.add(_m, rockTint());
+        placed.push({ x, z });
+      }
+    }
+
     // ---- mineable stone nodes ----
-    const nodeGeos = [0, 1, 2].map((k) => boulderGeometry(700 + k, { rough: 0.35, flat: 0.25, moss: 0.25, tint: [0.66, 0.64, 0.62] }));
-    this.nodePools = nodeGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 50, { near: 50, far: 300 }));
+    if (SCAN) {
+      this.nodePools = scanRockVariants('boulder').slice(1, 4).map(([hi, lo]) => new Pool(scene, [hi], 50, { near: 50, far: 300, lod: [lo] }));
+    } else {
+      const nodeGeos = [0, 1, 2].map((k) => boulderGeometry(700 + k, { rough: 0.35, flat: 0.25, moss: 0.25, tint: [0.66, 0.64, 0.62] }));
+      this.nodePools = nodeGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.rock }], 50, { near: 50, far: 300 }));
+    }
     const nodeSpots = this.sample(({ x, z, h, slope, pd, s, hi, rk, rnd }) => h > 1.8 && s > 10 && pd > 3 && pondOk(x, z, 4) && slope < 0.4 && (hi > 0.3 || rk > 0.3 || rnd() < 0.3) && this.free(x, z, 3), 12000).slice(0, 100);
     // guarantee a couple near spawn path
     const sp = T.spawn;
@@ -285,7 +340,7 @@ export class Nature {
       _e.set(0, R() * 6, 0); _q.setFromEuler(_e);
       _m.compose(_p.set(x, y + 0.2, z), _q, _s.set(s * 1.1, s * 0.8, s));
       const v = Math.floor(R() * 3);
-      const idx = this.nodePools[v].add(_m);
+      const idx = this.nodePools[v].add(_m, SCAN ? new THREE.Color(1.18, 1.14, 1.06) : null);
       const col = this.addCollider(x, z, s * 0.9, y + s);
       this.occupy(x, z, s + 1);
       this.addResource({ kind: 'node', x, z, y, r: s, hp: 5, maxHp: 5, pool: this.nodePools[v], idx, collider: col, label: 'Masso' });
@@ -354,11 +409,32 @@ export class Nature {
     const bushPools = bushGeos.map((g) => new Pool(scene, [{ geo: g, mat: M.bush }], 560, { shadow: this.quality > 0, near: 35, far: 150 }));
     const flowerPool = new Pool(scene, [{ geo: flowerGeometry(), mat: M.flower }], 1400, { shadow: false, far: 70 });
     const tint = new THREE.Color();
+    // scanned tropical understorey (Poly Haven anthurium + calathea): one pool per plant variant, drawn near the camera only
+    const SCAN_PLANTS = SCAN;
+    const plantPools = [];
+    if (SCAN_PLANTS) {
+      // desktop (quality 2) draws plants further and lets the big ones cast shadows; phones keep it lean
+      const hiQ = this.quality >= 2;
+      for (const [k, sc, n] of [['anthurium', [2.3, 3.4], 3], ['calathea', [2.6, 3.8], 2]]) {
+        ASSETS.models[k].forEach((v, i) => plantPools.push({ k, sc, w: n, pool: new Pool(scene, [{ geo: v.geo, mat: v.mat }], 700, { shadow: hiQ && i < 3, near: 30, far: hiQ ? 78 : 56 }) }));
+      }
+    }
+    const plantW = plantPools.reduce((a, p) => a + p.w, 0);
+    const pickPlant = () => { let r = R() * plantW; for (const p of plantPools) { r -= p.w; if (r <= 0) return p; } return plantPools[0]; };
     // undergrowth: thick in the jungle and along clearing edges, sparse on the plateaus, none on cliffs
     this.sample(({ x, z, h, slope, pd, rnd, jw, hi, cw, s }) => h > 1.2 && slope < 0.3 && pd > 1.8 && pondOk(x, z, 1) && rnd() < 0.15 + jw * 0.8 + hi * 0.25 + (cw > 0.1 && cw < 0.7 ? 0.5 : 0) - (s < 20 ? 0.1 : 0), 30000)
-      .slice(0, 1600).forEach(({ x, z }) => {
+      .slice(0, SCAN_PLANTS ? 3400 : 1600).forEach(({ x, z }) => {
         if (this.nearSpawn(x, z, 3)) return;
         const y = T.heightAt(x, z);
+        if (SCAN_PLANTS) {
+          const pp = pickPlant();
+          const s = pp.sc[0] + R() * (pp.sc[1] - pp.sc[0]);
+          _e.set((R() - 0.5) * 0.15, R() * 6.28, (R() - 0.5) * 0.15); _q.setFromEuler(_e);
+          _m.compose(_p.set(x, y - 0.06, z), _q, _s.set(s, s * (0.85 + R() * 0.35), s));
+          tint.setRGB(0.82 + R() * 0.22, 0.86 + R() * 0.2, 0.8 + R() * 0.18);
+          pp.pool.add(_m, tint);
+          return;
+        }
         const s = 0.7 + R() * 0.8;
         _e.set(0, R() * 6, 0); _q.setFromEuler(_e);
         _m.compose(_p.set(x, y - 0.1, z), _q, _s.set(s, s * (0.8 + R() * 0.4), s));
@@ -388,16 +464,19 @@ export class Nature {
       });
 
     // ---- ferns: jungle floor & shady slopes ----
-    const fernPools = [fernGeometry(3), fernGeometry(8)].map((g) => new Pool(scene, [{ geo: g, mat: M.fern }], 1100, { shadow: false, far: 110 }));
+    const fernPools = SCAN
+      ? ASSETS.models.weed.map((v) => new Pool(scene, [{ geo: v.geo, mat: v.mat }], 900, { shadow: false, far: this.quality >= 2 ? 62 : 45 }))
+      : [fernGeometry(3), fernGeometry(8)].map((g) => new Pool(scene, [{ geo: g, mat: M.fern }], 1100, { shadow: false, far: 110 }));
     this.sample(({ x, z, h, s, slope, pd, rnd, jw, hi }) => h > 2 && s > 14 && slope < 0.33 && pd > 1.6 && pondOk(x, z, 0.5) && rnd() < 0.1 + jw + hi * 0.3, 30000)
       .slice(0, 2100).forEach(({ x, z }) => {
         if (this.nearSpawn(x, z, 3)) return;
         const y = T.heightAt(x, z);
-        const s = 0.6 + R() * 0.6;
+        const s = SCAN ? 6 + R() * 5 : 0.6 + R() * 0.6;
         _e.set(0, R() * 6, 0); _q.setFromEuler(_e);
         _m.compose(_p.set(x, y - 0.05, z), _q, _s.set(s, s * (0.8 + R() * 0.4), s));
-        tint.setHSL(0.22 + R() * 0.06, 0.3, 0.45 + R() * 0.1);
-        fernPools[Math.floor(R() * 2)].add(_m, tint.clone().multiplyScalar(1.9));
+        if (SCAN) tint.setRGB(0.85 + R() * 0.2, 0.9 + R() * 0.15, 0.85 + R() * 0.15);
+        else tint.setHSL(0.22 + R() * 0.06, 0.3, 0.45 + R() * 0.1).multiplyScalar(1.9);
+        fernPools[Math.floor(R() * fernPools.length)].add(_m, tint);
       });
     this.fernPools = fernPools;
 
@@ -467,7 +546,7 @@ export class Nature {
     for (const o of this.occupied.map.values()) for (const c of o) if (c.r > 2.5 && c.r < 6) spots.push({ x: c.x, z: c.z, r: c.r * 1.3, k: 0.3 });
     if (T.mesh) T.bakeOcclusion(spots);
 
-    this.pools = [...this.fernPools, ...this.boulderPools, ...this.cliffPools, ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
+    this.pools = [...this.fernPools, ...this.boulderPools, ...this.cliffPools, ...(this.shelfPool ? [this.shelfPool] : []), ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...plantPools.map((p) => p.pool), ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
     for (const p of this.pools) p.finalize();
     this.cliffRocks = cliffRocks;
   }
@@ -506,7 +585,7 @@ export class Nature {
         if (h < 2.0) continue;
         // meadows: thick in clearings, patchy elsewhere, thin under the jungle canopy
         const dens = (T.noise(px * 0.03, pz * 0.03) * 0.5 + 0.5) * (1 - T.jungleW(px, pz) * 0.7) * 0.85 + T.clearW(px, pz) * 0.15;
-        if (R() > dens * 0.95 + 0.05) continue;
+        if (R() > (dens * 0.95 + 0.05) * (ASSETS.ok ? 0.55 : 1)) continue;
         if (T.slopeAt(px, pz) > 0.26 || T.grassAt(px, pz) < 0.6) continue;
         if (T.pathDist(px, pz) < 1.3 || T.isInPond(px, pz, 0.8)) continue;
         const key = Math.floor(px / CH) + ',' + Math.floor(pz / CH);
@@ -521,8 +600,8 @@ export class Nature {
         _e.set(0, R() * 6, 0); _q.setFromEuler(_e);
         const s = 0.7 + R() * 0.7;
         _m.compose(_p.set(x, y - 0.03, z), _q, _s.set(s, s * (0.7 + R() * 0.6), s));
-        col.setHSL(0.2 + R() * 0.06, 0.2 + R() * 0.1, 0.34 + R() * 0.12);
-        pool.add(_m, col.clone().multiplyScalar(1.55));
+        col.setHSL(0.21 + R() * 0.05, 0.26 + R() * 0.1, 0.36 + R() * 0.12);
+        pool.add(_m, col.clone().multiplyScalar(ASSETS.ok ? 1.85 : 1.55));
       }
       pool.finalize();
       this.grassChunks.push({ pool, x: c.cx, z: c.cz });

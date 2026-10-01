@@ -80,9 +80,14 @@ const frag = /* glsl */`
     // body colour by depth
     vec3 col = mix(uShallow, uMid, smoothstep(0.4, 3.8, depth));
     col = mix(col, uDeep, smoothstep(3.8, 16.0, depth));
-    // light caustic shimmer in the shallows
-    float caus = pow(abs(sin(vnoise(p * 1.3 + t * 0.4) * 6.2831 + t)), 6.0);
-    col += caus * 0.12 * (1.0 - smoothstep(0.5, 4.0, depth)) * (1.0 - uNight);
+    // caustics: thin bright ridges from two drifting noise layers (cellular look, no repeating stripes)
+    float c1 = 1.0 - abs(vnoise(p * 0.85 + vec2(t * 0.21, t * 0.13)) * 2.0 - 1.0);
+    float c2 = 1.0 - abs(vnoise(p * 1.37 - vec2(t * 0.17, -t * 0.19) + 3.1) * 2.0 - 1.0);
+    float caus = pow(c1, 7.0) * 0.6 + pow(c2, 9.0) * 0.5 + pow(c1 * c2, 4.0) * 0.6;
+    float shallowK = 1.0 - smoothstep(0.3, 4.5, depth);
+    col += vec3(0.85, 1.0, 0.95) * caus * 0.2 * shallowK * (1.0 - uNight);
+    // sandy bottom showing through the first metre
+    col = mix(col, vec3(0.78, 0.82, 0.66), (1.0 - smoothstep(0.0, 1.1, depth)) * 0.35 * (1.0 - uPond));
     float diff = 0.55 + 0.45 * max(dot(N, L), 0.0);
     col *= diff * mix(vec3(1.0), uSunColor, 0.35);
 
@@ -97,13 +102,13 @@ const frag = /* glsl */`
 
     // shore foam
     float fn = vnoise(p * 1.6 + vec2(t * 0.3, 0.0)) * 0.6 + vnoise(p * 4.0 - t * 0.5) * 0.4;
-    float shore = 1.0 - smoothstep(0.0, 0.05 + fn * 0.09, depth);
+    float shore = (1.0 - smoothstep(0.0, 0.04 + fn * 0.07, depth)) * smoothstep(0.25, 0.55, fn + 0.2);
     float wave = sin(depth * 5.0 - t * 1.6 + fn * 3.0);
     float band = smoothstep(0.9, 1.0, wave) * (1.0 - smoothstep(0.08, 0.4, depth)) * smoothstep(0.5, 0.7, fn);
     float foam = clamp(max(shore, band * 0.8), 0.0, 1.0) * (1.0 - uPond * 0.6);
     col = mix(col, vec3(0.96, 0.98, 1.0) * (0.75 + 0.25 * diff), foam);
 
-    float alpha = mix(0.66, 0.96, smoothstep(0.0, 2.5, depth));
+    float alpha = mix(0.42, 0.97, smoothstep(0.0, 3.2, depth));
     alpha = max(alpha, fres * 0.9);
     alpha = max(alpha, foam);
     alpha *= smoothstep(-0.05, 0.08, depth);
@@ -140,9 +145,9 @@ export function createWaterMaterial(heightTex, { level = 0, pond = false } = {})
         uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
         uZenith: { value: new THREE.Color(0x2f7fd8) },
         uHorizon: { value: new THREE.Color(0xa9d8f0) },
-        uShallow: { value: pond ? lin(0x3fb7a8) : lin(0x22d6cc) },
-        uMid: { value: pond ? lin(0x1d7f7a) : lin(0x0e9cc0) },
-        uDeep: { value: pond ? lin(0x145a5a) : lin(0x0a4d93) },
+        uShallow: { value: pond ? lin(0x3fb7a8) : lin(0x5fe0d2) },
+        uMid: { value: pond ? lin(0x1d7f7a) : lin(0x0fa6bd) },
+        uDeep: { value: pond ? lin(0x145a5a) : lin(0x0b3f7a) },
       },
     ]),
   });

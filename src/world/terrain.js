@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { makeNoise2D, fbm, smoothstep, clamp, lerp } from '../util/noise.js';
 import { grassDetailTexture, sandDetailTexture, rockDetailTexture } from '../util/textures.js';
+import { ASSETS } from './assets.js';
 import {
   LAND, CARVE, MASSIFS, MASSIF_A, CLEARINGS, POND, CAVE, COVE, LOOKOUT, ARCH, ISLETS, ROCKY, BEACHES, PATHS,
 } from './layout.js';
@@ -389,14 +390,92 @@ export class Terrain {
     // sand
     t.copy(COL.sandDry).lerp(COL.sandWet, 1 - smoothstep(0.25, 0.9, h));
     c.lerp(t, sand);
+    this._wSand = sand; this._wJungle = jungle * (1 - clear); this._wRock = rock;
     return c;
+  }
+
+  // Scanned ground layers (Poly Haven): grass, jungle floor (sand/rock/grass mix), beach sand.
+  // World-space UVs with a rotated second sample and macro blend to hide tiling; layered normal maps; wet sand at the waterline.
+  _scannedMaterial(mat, macroTex) {
+    const T = ASSETS.tex;
+    mat.map = null;
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, {
+        tGrass: { value: T.grassrock_diff }, nGrass: { value: T.grassrock_nor },
+        tJung: { value: T.coastsand_diff }, nJung: { value: T.coastsand_nor },
+        tSand: { value: T.sand_diff }, nSand: { value: T.sand_nor }, tMacro: { value: macroTex },
+      });
+      sh.vertexShader = 'attribute vec4 aLay;\nvarying vec4 vLay;\nvarying vec3 vWPos;\nvarying vec3 vWN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvLay = aLay; vWPos = position; vWN = normal;');
+      sh.fragmentShader = `uniform sampler2D tGrass, nGrass, tJung, nJung, tSand, nSand, tMacro;
+        varying vec4 vLay; varying vec3 vWPos; varying vec3 vWN;
+        const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+        vec3 tri(sampler2D t, vec3 p, vec3 an, float s) { // triplanar for cliffs
+          return texture2D(t, p.zy * s).rgb * an.x + texture2D(t, p.xz * s).rgb * an.y + texture2D(t, p.xy * s).rgb * an.z;
+        }
+      ` + sh.fragmentShader
+        .replace('#include <color_fragment>', `
+          #include <color_fragment>
+          vec2 wp = vWPos.xz;
+          float mac = texture2D(tMacro, wp * 0.0045).g;
+          float mac2 = texture2D(tMacro, wp * 0.0013 + 0.37).r;
+          float tb = smoothstep(0.25, 0.75, mac);
+          vec2 uA = wp * 0.13, uB = mat2(0.83, -0.56, 0.56, 0.83) * wp * 0.047 + vec2(0.31, 0.77);
+          vec3 gA = mix(texture2D(tGrass, uA).rgb, texture2D(tGrass, uB).rgb, tb);
+          vec3 jA = mix(texture2D(tJung, uA * 1.4).rgb, texture2D(tJung, uB * 1.9).rgb, tb);
+          vec3 sA = mix(texture2D(tSand, wp * 0.21).rgb, texture2D(tSand, uB * 2.3).rgb, 0.5);
+          vec3 an = abs(normalize(vWN)); an /= (an.x + an.y + an.z);
+          vec3 rA = tri(tJung, vWPos, an, 0.09);
+          float wG = vLay.x, wR = vLay.y, wS = vLay.z, wJ = vLay.w;
+          vec3 base = diffuseColor.rgb; // biome tint from the vertex colour
+          // grass: scanned albedo pulled toward the biome colour, gravel keeps its grey
+          float lg = dot(gA, LUM) / 0.13;
+          vec3 grass = mix(base * lg * vec3(0.92, 1.04, 0.86), gA * vec3(0.5, 1.0, 0.55) * 1.05, 0.36);
+          // jungle floor: leaf litter / soil / pebbles
+          float lj = dot(jA, LUM) / 0.07;
+          vec3 jung = mix(base * lj, jA * vec3(0.95, 1.05, 0.85) * 1.25, 0.5);
+          vec3 veg = mix(grass, jung, clamp(wJ * 0.85 + (1.0 - wG) * 0.3, 0.0, 1.0));
+          // sand: keep the warm beach colour, add real grain
+          float ls = dot(sA, LUM) / 0.125;
+          vec3 sand = base * mix(1.0, ls, 0.8);
+          // rock: grey limestone tint with scanned breakup
+          float lr = dot(rA, LUM) / 0.07;
+          vec3 rock = base * mix(1.0, lr, 0.65);
+          vec3 col = veg;
+          col = mix(col, sand, clamp(wS, 0.0, 1.0));
+          col = mix(col, rock, clamp(wR, 0.0, 1.0));
+          col *= 0.9 + 0.2 * mac2;
+          // wet sand band just above the sea, darker and glossy
+          float wet = wS * (1.0 - smoothstep(0.05, 0.75, vWPos.y)) * step(-0.6, vWPos.y);
+          col *= 1.0 - wet * 0.38;
+          diffuseColor.rgb = col;
+        `)
+        .replace('#include <roughnessmap_fragment>', `
+          float roughnessFactor = roughness;
+          roughnessFactor = mix(roughnessFactor, 0.32, wet);
+        `)
+        .replace('#include <normal_fragment_maps>', `
+          {
+            vec3 nG = texture2D(nGrass, uA).xyz * 2.0 - 1.0;
+            vec3 nJ = texture2D(nJung, uA * 1.4).xyz * 2.0 - 1.0;
+            vec3 nS = texture2D(nSand, wp * 0.21).xyz * 2.0 - 1.0;
+            vec3 tn = nG * wG * (1.0 - wJ) + nJ * (wJ * wG + wR) + nS * wS + vec3(0.0, 0.0, 1.0) * 0.15;
+            tn = normalize(vec3(tn.xy * 1.25, max(tn.z, 0.15)));
+            vec3 N = normalize(vWN);
+            vec3 Tt = normalize(vec3(1.0, 0.0, 0.0) - N * N.x);
+            vec3 Bt = normalize(cross(N, Tt));
+            vec3 wn = normalize(Tt * tn.x + Bt * tn.y + N * tn.z);
+            normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
+          }
+        `);
+    };
+    mat.customProgramCacheKey = () => 'terrainScan1';
   }
 
   // ---------- mesh (chunked for frustum culling) ----------
   buildMesh() {
     const H = this.heights;
     const pos = new Float32Array(N * N * 3), nrm = new Float32Array(N * N * 3), uv = new Float32Array(N * N * 2);
-    const col = new Float32Array(N * N * 3), grassW = new Float32Array(N * N), rockW = new Float32Array(N * N);
+    const col = new Float32Array(N * N * 3), grassW = new Float32Array(N * N), rockW = new Float32Array(N * N), layW = new Float32Array(N * N * 4);
     const hAt = (i, j) => H[clamp(j, 0, GRID) * N + clamp(i, 0, GRID)];
     const c = new THREE.Color(), t = new THREE.Color(), v = new THREE.Vector3();
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
@@ -412,6 +491,7 @@ export class Terrain {
       const slope = 1 - v.y;
       rockW[k] = h < 0.3 ? 0 : Math.max(smoothstep(0.18, 0.4, slope), this.mRocky[k] * smoothstep(0.1, 0.24, slope));
       grassW[k] = h < 0.05 ? 0 : smoothstep(sandLine, sandLine + 0.9, h) * (1 - smoothstep(0.18, 0.4, slope)) * smoothstep(1.2, 2.6, this._pathDist(x, z));
+      layW[k * 4] = grassW[k]; layW[k * 4 + 1] = Math.max(rockW[k], this._wRock || 0); layW[k * 4 + 2] = h < 0.05 ? 1 : this._wSand || 0; layW[k * 4 + 3] = this._wJungle || 0;
     }
     this._arrays = { pos, nrm, uv, col, grassW, rockW };
 
@@ -439,6 +519,7 @@ export class Terrain {
       `);
     };
     mat.customProgramCacheKey = () => 'terrain4';
+    if (ASSETS.ok) this._scannedMaterial(mat, grassTex);
 
     const group = new THREE.Group();
     group.name = 'terrain';
@@ -459,6 +540,7 @@ export class Terrain {
       g.setAttribute('color', new THREE.BufferAttribute(take(col, 3), 3));
       g.setAttribute('aGrass', new THREE.BufferAttribute(take(grassW, 1), 1));
       g.setAttribute('aRock', new THREE.BufferAttribute(take(rockW, 1), 1));
+      g.setAttribute('aLay', new THREE.BufferAttribute(take(layW, 4), 4));
       const idx = [];
       for (let j = 0; j < hgt - 1; j++) for (let i = 0; i < w - 1; i++) {
         const a = j * w + i, b = a + 1, cc = a + w, d = cc + 1;
