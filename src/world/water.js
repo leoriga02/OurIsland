@@ -21,6 +21,7 @@ const frag = /* glsl */`
   uniform vec3 uIslands[12];
   uniform int uIslandCount;
   uniform float uTime, uWorldSize, uLevel, uHtMin, uHtMax, uPond, uNight;
+  uniform vec3 uPondC;
   uniform vec3 uSunDir, uSunColor, uZenith, uHorizon, uShallow, uMid, uDeep;
   varying vec3 vWorld;
 
@@ -50,7 +51,8 @@ const frag = /* glsl */`
     float t = uTime;
     float th = terrainH(p);
     float depth = uLevel - th;
-    if (uPond > 0.5) depth = max(depth, 0.0) + 0.6;
+    // the pond sits above the height texture's range: shape it by its radius instead
+    if (uPond > 0.5) { float pd = uPondC.z + 0.7 - length(p - uPondC.xy); depth = pd > 0.0 ? 0.6 + pd * 0.3 : pd; }
     // distant islands live outside the height texture: fake a shallow shelf around each
     for (int i = 0; i < 12; i++) {
       if (i >= uIslandCount) break;
@@ -130,6 +132,7 @@ export function createWaterMaterial(heightTex, { level = 0, pond = false } = {})
         uLevel: { value: level },
         uHtMin: { value: HT_MIN }, uHtMax: { value: HT_MAX },
         uPond: { value: pond ? 1 : 0 },
+        uPondC: { value: new THREE.Vector3(0, 0, 0) },
         uNight: { value: 0 },
         uIslands: { value: Array.from({ length: 12 }, () => new THREE.Vector3(1e6, 1e6, 0)) },
         uIslandCount: { value: 0 },
@@ -162,6 +165,7 @@ export function setWaterIslands(mat, list) {
 
 export function createPond(heightTex, pond) {
   const mat = createWaterMaterial(heightTex, { level: pond.y, pond: true });
+  mat.uniforms.uPondC.value.set(pond.x, pond.z, pond.r);
   const geo = new THREE.CircleGeometry(pond.r + 2.5, 48);
   geo.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geo, mat);

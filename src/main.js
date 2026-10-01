@@ -12,7 +12,8 @@ THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars
   `vec3 CustomToneMapping( vec3 color ) {
     vec3 c = ACESFilmicToneMapping( color );
     float l = dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
-    c = mix( vec3( l ), c, 1.17 );
+    float gdom = smoothstep( 0.02, 0.22, c.g - max( c.r, c.b ) );
+    c = mix( vec3( l ), c, 1.1 - gdom * 0.24 );
     c = mix( c, c * c * ( 3.0 - 2.0 * c ), 0.2 );
     c += vec3( 0.02, 0.009, -0.012 ) * smoothstep( 0.35, 0.95, l );
     c += vec3( -0.012, 0.002, 0.02 ) * ( 1.0 - smoothstep( 0.0, 0.35, l ) );
@@ -67,12 +68,12 @@ async function boot() {
   const newBtn = $('btn-new');
   const show = (id) => { for (const m of ['menu-main', 'menu-join', 'menu-guest']) $(m).classList.toggle('hidden', m !== id); };
   if (game.loaded && mode === 'solo') {
-    startBtn.textContent = 'Continue';
+    startBtn.textContent = 'Continua';
     newBtn.classList.remove('hidden');
   }
   $('title-hint').textContent = isMobile
-    ? 'Left thumb: move · Right thumb: look · Hold » to sprint · Big button: act'
-    : 'WASD move · Shift sprint · Space jump · E act · Drag mouse to look · Tab backpack · B build';
+    ? 'Sinistra: muovi · Destra: guarda · Tieni » per correre · Tasto grande: azione'
+    : 'WASD muovi · Shift corri · Spazio salta · E azione · Trascina il mouse per guardare · Tab zaino · B costruisci';
 
   // character choice
   const cards = document.querySelectorAll('.char-card');
@@ -90,7 +91,7 @@ async function boot() {
     if (isMobile && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   };
   startBtn.addEventListener('click', begin);
-  newBtn.addEventListener('click', () => { if (confirm('Start over on a new island? Your progress will be lost.')) { game.clearSave(); game.noSave = true; location.reload(); } });
+  newBtn.addEventListener('click', () => { if (confirm('Ricominciare su una nuova isola? I progressi andranno persi.')) { game.clearSave(); game.noSave = true; location.reload(); } });
 
   // host: open a room on this island and start playing right away
   $('btn-host').addEventListener('click', async () => {
@@ -100,7 +101,7 @@ async function boot() {
     let code;
     try { code = localStorage.getItem('ourisland-room') || makeRoomCode(); localStorage.setItem('ourisland-room', code); } catch { code = makeRoomCode(); }
     try { await game.startCoop('host', code); }
-    catch (e) { game.ui.toast(null, 'Co-op unavailable: ' + e.message, true); }
+    catch (e) { game.ui.toast(null, 'Co-op non disponibile: ' + e.message, true); }
   });
   // join: reload into guest mode so the partner's world replaces this one cleanly
   $('btn-join').addEventListener('click', () => { show('menu-join'); setTimeout(() => $('join-code').focus(), 50); });
@@ -118,7 +119,7 @@ async function boot() {
 
   if (mode === 'guest') {
     show('menu-guest');
-    $('guest-label').textContent = `Join your partner's island · room ${joinCode}`;
+    $('guest-label').textContent = `Raggiungi l’isola del compagno · stanza ${joinCode}`;
     const status = $('guest-status');
     $('btn-guest-solo').addEventListener('click', () => { const q = new URLSearchParams(location.search); q.delete('join'); location.search = q.toString(); });
     let joining = false;
@@ -127,14 +128,14 @@ async function boot() {
       joining = true;
       game.audio.unlock();
       $('btn-guest-go').disabled = true;
-      status.textContent = 'Connecting…';
+      status.textContent = 'Connessione…';
       game.onCoopReady = () => { status.textContent = ''; begin(); };
       game.onCoopStatus = (s) => {
         if (game.started) return;
-        status.textContent = { connecting: 'Connecting…', searching: `Looking for room ${joinCode}… (is your partner's game open?)`, reconnecting: 'Retrying…', offline: 'No connection — retrying…', connected: 'Connected! Loading island…' }[s] || s;
+        status.textContent = { connecting: 'Connessione…', searching: `Ricerca stanza ${joinCode}… (il gioco del compagno è aperto?)`, reconnecting: 'Nuovo tentativo…', offline: 'Nessuna connessione, nuovo tentativo…', connected: 'Connesso! Caricamento isola…' }[s] || s;
       };
       try { await game.startCoop('guest', joinCode); }
-      catch (e) { status.textContent = 'Could not start co-op: ' + e.message; joining = false; $('btn-guest-go').disabled = false; }
+      catch (e) { status.textContent = 'Impossibile avviare il co-op: ' + e.message; joining = false; $('btn-guest-go').disabled = false; }
     };
     $('btn-guest-go').addEventListener('click', goGuest);
     if (params.has('autojoin')) goGuest();
@@ -170,5 +171,5 @@ async function boot() {
 }
 boot().catch((e) => {
   console.error(e);
-  loading.innerHTML = '<div style="padding:20px;max-width:90vw;font-family:sans-serif">Something went wrong: ' + e.message + '</div>';
+  loading.innerHTML = '<div style="padding:20px;max-width:90vw;font-family:sans-serif">Qualcosa è andato storto: ' + e.message + '</div>';
 });

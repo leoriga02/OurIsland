@@ -4,21 +4,21 @@ import { setColor, merge, boulderGeometry, noise3 } from '../world/models.js';
 import { mulberry32 } from '../util/noise.js';
 
 export const ITEMS = {
-  wood: { name: 'Wood', desc: 'Sturdy log. The backbone of every build.', stack: 50 },
-  stick: { name: 'Stick', desc: 'A dry branch. Useful for tools.', stack: 50 },
-  stone: { name: 'Stone', desc: 'A hand-sized rock.', stack: 50 },
-  fiber: { name: 'Plant Fiber', desc: 'Tough fibres. Twist them into rope.', stack: 50 },
-  leaf: { name: 'Palm Leaf', desc: 'Great for thatch and bedding.', stack: 50 },
-  rope: { name: 'Rope', desc: 'Binds everything together.', stack: 50 },
-  coconut: { name: 'Coconut', desc: 'Sweet water and flesh. +Water +Food', stack: 20, food: 8, water: 25 },
-  berries: { name: 'Wild Berries', desc: 'Juicy and tart. +Food', stack: 20, food: 12, water: 5 },
-  crab_raw: { name: 'Raw Crab', desc: 'Better cooked over a fire...', stack: 20, food: 6, health: -6 },
-  crab_cooked: { name: 'Grilled Crab', desc: 'Delicious! Restores food and health.', stack: 20, food: 38, health: 12 },
-  axe: { name: 'Stone Axe', desc: 'Fells trees. Wood & leaves.', stack: 1, tool: 'axe' },
-  pickaxe: { name: 'Stone Pickaxe', desc: 'Breaks boulders for stone.', stack: 1, tool: 'pickaxe' },
-  torch: { name: 'Torch', desc: 'Lights up the night.', stack: 1, tool: 'torch' },
-  campfire: { name: 'Campfire', desc: 'Warmth, light and cooking. Place it on the ground.', stack: 5, place: 'campfire' },
-  bed: { name: 'Leaf Bed', desc: 'Sleep through the night. Sets your respawn point.', stack: 2, place: 'bed' },
+  wood: { name: 'Legno', desc: 'Un tronco robusto. La base di ogni costruzione.', stack: 50 },
+  stick: { name: 'Bastone', desc: 'Un ramo secco. Utile per gli attrezzi.', stack: 50 },
+  stone: { name: 'Pietra', desc: 'Un sasso grande quanto una mano.', stack: 50 },
+  fiber: { name: 'Fibra', desc: 'Fibre resistenti. Intrecciale per fare corda.', stack: 50 },
+  leaf: { name: 'Foglia di palma', short: 'Foglie', desc: 'Ottima per tetti di paglia e giacigli.', stack: 50 },
+  rope: { name: 'Corda', desc: 'Tiene insieme ogni cosa.', stack: 50 },
+  coconut: { name: 'Cocco', desc: 'Acqua dolce e polpa. +Acqua +Cibo', stack: 20, food: 8, water: 25 },
+  berries: { name: 'Bacche', desc: 'Succose e aspre. +Cibo', stack: 20, food: 12, water: 5 },
+  crab_raw: { name: 'Granchio crudo', desc: 'Meglio cotto sul fuoco...', stack: 20, food: 6, health: -6 },
+  crab_cooked: { name: 'Granchio alla brace', desc: 'Delizioso! Ripristina cibo e salute.', stack: 20, food: 38, health: 12 },
+  axe: { name: 'Ascia di pietra', desc: 'Abbatte alberi. Legno e foglie.', stack: 1, tool: 'axe' },
+  pickaxe: { name: 'Piccone di pietra', desc: 'Spacca i massi per la pietra.', stack: 1, tool: 'pickaxe' },
+  torch: { name: 'Torcia', desc: 'Illumina la notte.', stack: 1, tool: 'torch' },
+  campfire: { name: 'Falò', desc: 'Calore, luce e cucina. Posizionalo a terra.', stack: 5, place: 'campfire' },
+  bed: { name: 'Giaciglio di foglie', desc: 'Dormi fino al mattino. Imposta il punto di rinascita.', stack: 2, place: 'bed' },
 };
 
 export const RECIPES = [
@@ -31,11 +31,11 @@ export const RECIPES = [
 ];
 
 export const PIECES = {
-  foundation: { name: 'Wooden Foundation', desc: 'A raised plank floor. Start every home here.', cost: { wood: 4, rope: 1 } },
-  wall: { name: 'Wooden Wall', desc: 'A sturdy wall made of lashed logs.', cost: { wood: 3 } },
-  doorway: { name: 'Doorway', desc: 'A wall with an opening.', cost: { wood: 3 } },
-  window: { name: 'Window Wall', desc: 'Let the sea breeze in.', cost: { wood: 3 } },
-  roof: { name: 'Thatch Roof', desc: 'Palm thatch over a timber frame.', cost: { wood: 2, leaf: 4 } },
+  foundation: { name: 'Fondazione in legno', desc: 'Un pavimento rialzato di assi. Ogni casa parte da qui.', cost: { wood: 4, rope: 1 } },
+  wall: { name: 'Parete in legno', desc: 'Una parete robusta di tronchi legati.', cost: { wood: 3 } },
+  doorway: { name: 'Porta', desc: 'Una parete con un passaggio.', cost: { wood: 3 } },
+  window: { name: 'Finestra', desc: 'Lascia entrare la brezza marina.', cost: { wood: 3 } },
+  roof: { name: 'Tetto di paglia', desc: 'Foglie di palma su un telaio di legno.', cost: { wood: 2, leaf: 4 } },
 };
 
 // ---------------- item models (vertex-coloured merged geometry) ----------------
