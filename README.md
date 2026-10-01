@@ -1,6 +1,6 @@
 # Our Island
 
-A mobile-first, third-person tropical survival prototype built with Three.js. The in-game text is in Italian. There's no build step. Ground textures, rocks and understorey plants are CC0 scanned assets from Poly Haven (`assets/polyhaven/`, see its CREDITS.md). Everything else (characters, trees, buildings, sounds) is generated in code, and the game falls back to procedural versions if the assets fail to load.
+A mobile-first, third-person tropical survival prototype built with Three.js. The in-game text is in Italian. There's no build step. Ground textures, rocks and understorey plants are CC0 scanned assets from Poly Haven (`assets/external/`, see its CREDITS.md). Everything else (characters, trees, buildings, sounds) is generated in code, and the game falls back to procedural versions if the assets fail to load.
 
 **Early-game loop:** wash ashore → gather sticks, stones and fiber → craft a stone axe → fell palms → make a campfire → find fresh water → build a raised wooden hut (foundation, walls, doorway, thatch roof) → craft a leaf bed and sleep through the night.
 

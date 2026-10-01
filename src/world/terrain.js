@@ -390,7 +390,7 @@ export class Terrain {
     // sand
     t.copy(COL.sandDry).lerp(COL.sandWet, 1 - smoothstep(0.25, 0.9, h));
     c.lerp(t, sand);
-    this._wSand = sand; this._wJungle = jungle * (1 - clear); this._wRock = rock;
+    this._wSand = sand; this._wJungle = Math.max(jungle * (1 - clear), sand * smoothstep(0.25, 0.6, rk)); this._wRock = rock;
     return c;
   }
 
@@ -437,6 +437,9 @@ export class Terrain {
           // sand: keep the warm beach colour, add real grain
           float ls = dot(sA, LUM) / 0.125;
           vec3 sand = base * mix(1.0, ls, 0.8);
+          // rocky shorelines: pebbles and rock flats from coast_sand_rocks instead of fine beach sand
+          vec3 pebbly = mix(base * lj * vec3(0.95, 0.93, 0.9), jA * 1.35, 0.55);
+          sand = mix(sand, pebbly, clamp(wJ * wS, 0.0, 1.0));
           // rock: grey limestone tint with scanned breakup
           float lr = dot(rA, LUM) / 0.07;
           vec3 rock = base * mix(1.0, lr, 0.65);
@@ -458,7 +461,7 @@ export class Terrain {
             vec3 nG = texture2D(nGrass, uA).xyz * 2.0 - 1.0;
             vec3 nJ = texture2D(nJung, uA * 1.4).xyz * 2.0 - 1.0;
             vec3 nS = texture2D(nSand, wp * 0.21).xyz * 2.0 - 1.0;
-            vec3 tn = nG * wG * (1.0 - wJ) + nJ * (wJ * wG + wR) + nS * wS + vec3(0.0, 0.0, 1.0) * 0.15;
+            vec3 tn = nG * wG * (1.0 - wJ) + nJ * (wJ * wG + wR + wJ * wS) + nS * wS * (1.0 - wJ) + vec3(0.0, 0.0, 1.0) * 0.15;
             tn = normalize(vec3(tn.xy * 1.25, max(tn.z, 0.15)));
             vec3 N = normalize(vWN);
             vec3 Tt = normalize(vec3(1.0, 0.0, 0.0) - N * N.x);
@@ -468,7 +471,7 @@ export class Terrain {
           }
         `);
     };
-    mat.customProgramCacheKey = () => 'terrainScan1';
+    mat.customProgramCacheKey = () => 'terrainScan2';
   }
 
   // ---------- mesh (chunked for frustum culling) ----------

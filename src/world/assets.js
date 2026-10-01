@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-const BASE = './assets/polyhaven/';
+const BASE = './assets/external/';
 export const ASSETS = { ok: false, models: {}, tex: {} };
 
 // quantized/meshopt attributes -> plain float32 so geometry can be transformed and merged
@@ -48,13 +48,24 @@ export async function loadAssets(onProgress) {
   try {
     const gl = new GLTFLoader();
     gl.setMeshoptDecoder(MeshoptDecoder);
-    const files = ['boulder', 'boulder_lod', 'coast_rocks', 'coast_rocks_lod', 'calathea', 'anthurium', 'weed'];
+    // key -> file under assets/external/
+    const MODELS = {
+      boulder: 'rocks/boulder_01.glb', boulder_lod: 'rocks/boulder_01_lod.glb',
+      coast_rocks: 'rocks/coast_rocks_02.glb', coast_rocks_lod: 'rocks/coast_rocks_02_lod.glb',
+      anthurium: 'plants/anthurium_botany_01.glb', calathea: 'plants/calathea_orbifolia_01.glb', weed: 'plants/weed_plant_02.glb',
+    };
+    const files = Object.keys(MODELS);
     let done = 0;
-    const models = await Promise.all(files.map((f) => gl.loadAsync(BASE + f + '.glb').then((r) => { onProgress?.(++done / (files.length + 6)); return r; })));
+    const models = await Promise.all(files.map((f) => gl.loadAsync(BASE + MODELS[f]).then((r) => { onProgress?.(++done / (files.length + 6)); return r; })));
     files.forEach((f, i) => { ASSETS.models[f] = extract(models[i]); });
     const tl = new THREE.TextureLoader();
-    const names = ['grassrock_diff', 'grassrock_nor', 'coastsand_diff', 'coastsand_nor', 'sand_diff', 'sand_nor'];
-    const texs = await Promise.all(names.map((n) => loadTex(tl, n + '.jpg', n.endsWith('diff')).then((t) => { onProgress?.(++done / (files.length + 6)); return t; })));
+    const TEX = {
+      grassrock_diff: 'ground/aerial_grass_rock_diff.jpg', grassrock_nor: 'ground/aerial_grass_rock_nor.jpg',
+      coastsand_diff: 'ground/coast_sand_rocks_02_diff.jpg', coastsand_nor: 'ground/coast_sand_rocks_02_nor.jpg',
+      sand_diff: 'ground/sand_03_diff.jpg', sand_nor: 'ground/sand_03_nor.jpg',
+    };
+    const names = Object.keys(TEX);
+    const texs = await Promise.all(names.map((n) => loadTex(tl, TEX[n], n.endsWith('diff')).then((t) => { onProgress?.(++done / (files.length + 6)); return t; })));
     names.forEach((n, i) => { ASSETS.tex[n] = texs[i]; });
     ASSETS.ok = texs.every(Boolean);
     // plants: plain standard material (no clear-coat/specular extensions), soft two-sided leaf lighting and wind sway
