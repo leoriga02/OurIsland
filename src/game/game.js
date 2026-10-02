@@ -351,10 +351,16 @@ export class Game {
   }
 
   // ---------------- interaction ----------------
+  // One aim for every camera mode: first person aims where you look, third person where the body faces.
+  aimForward() {
+    if (this.rig.firstPerson) return new THREE.Vector3(-Math.sin(this.rig.yaw), 0, -Math.cos(this.rig.yaw));
+    return this.player.forward;
+  }
+
   findTarget() {
     const P = this.player, p = P.pos;
     if (P.swimming) return null;
-    const fwd = P.forward;
+    const fwd = this.aimForward();
     let best = null, bestScore = 1e9;
     const consider = (o, kind, reach) => {
       const dx = o.x - p.x, dz = o.z - p.z;
@@ -944,7 +950,13 @@ export class Game {
   // first person hides the local body from the main camera (layer 2) but keeps its shadow
   applyView() {
     const fp = this.settings.view !== 'tp';
-    this.rig.firstPerson = fp;
+    const rig = this.rig, P = this.player;
+    if (rig.firstPerson !== fp) {
+      // keep the view direction; snap the third-person boom so the switch is instant (no swoop)
+      if (!fp) { rig.pitch = Math.min(1.25, Math.max(-0.25, rig.pitch)); rig.target.set(P.pos.x, P.pos.y + (P.swimming ? 1.85 : 1.55), P.pos.z); rig.curDist = rig.dist; }
+      if (!P.char.busy) P.facing = rig.yaw + Math.PI; // both views keep aiming at what you were looking at
+    }
+    rig.firstPerson = fp;
     this.player.char.root.traverse((o) => { o.layers.set(2); });
     if (fp) this.camera.layers.disable(2); else this.camera.layers.enable(2);
     this.viewModel.visible = fp;

@@ -47,6 +47,8 @@ export class Net {
     this.connected = false;
     this.lastRecv = 0;
     this.closed = false;
+    // heartbeat on a timer too, so a throttled render loop doesn't starve the partner of pings
+    this.pingT = setInterval(() => { if (this.connected) this.send({ t: 'ping' }); }, 1000);
     this.retryT = null;
     this.attempt = 0;
   }
@@ -143,8 +145,12 @@ export class Net {
 
   // Heartbeat + stale-link detection (mobile browsers can silently drop channels when backgrounded).
   tick() {
-    if (!this.connected) return;
     const now = performance.now();
+    // after a frozen stretch (tab hidden, very long frame) data may still be queued behind us: don't blame the link
+    const gap = now - (this._lastTick || now);
+    this._lastTick = now;
+    if (gap > 3000) this.lastRecv = now;
+    if (!this.connected) return;
     if (!this._lastPing || now - this._lastPing > 1000) { this._lastPing = now; this.send({ t: 'ping' }); }
     if (now - this.lastRecv > 10000) {
       try { this.conn?.close(); } catch { /* ignore */ }
@@ -166,6 +172,7 @@ export class Net {
 
   destroy() {
     this.closed = true;
+    clearInterval(this.pingT);
     clearTimeout(this.retryT); clearTimeout(this.openT);
     try { this.conn?.close(); } catch { /* ignore */ }
     try { this.peer?.destroy(); } catch { /* ignore */ }

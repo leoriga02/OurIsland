@@ -195,8 +195,16 @@ export class CameraRig {
       this.camera.position.y += (Math.random() - 0.5) * a;
     }
     this.camera.lookAt(this.pos.x + fx, this.pos.y + fy, this.pos.z + fz);
-    // the body follows the view so interaction targets are what you look at
-    if (!player.frozen) player.facing = this.yaw + Math.PI;
+    // body turns in place only when the view gets well away from it (walking already faces the move direction)
+    if (!player.frozen && !player.char.busy && player.speed < 0.4) {
+      const want = this.yaw + Math.PI;
+      const diff = Math.atan2(Math.sin(want - player.facing), Math.cos(want - player.facing));
+      if (Math.abs(diff) > 1.1) this.turning = true;
+      if (this.turning) {
+        player.facing = angleDamp(player.facing, want, 7, dt);
+        if (Math.abs(diff) < 0.08) this.turning = false;
+      }
+    } else this.turning = false;
   }
 
   update(dt, player, intent) {
