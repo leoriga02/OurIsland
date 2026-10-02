@@ -1,5 +1,5 @@
 // DOM HUD, hotbar, inventory/crafting panel, build bar, minimap.
-import { ITEMS, RECIPES, PIECES, TIERS, tierUnlocked } from '../game/items.js';
+import { ITEMS, RECIPES, PIECES, TIERS, STATIONS, tierUnlocked } from '../game/items.js';
 import { HOTBAR } from '../game/inventory.js';
 import { SVG } from './icons.js';
 import { WORLD_SIZE } from '../world/terrain.js';
@@ -81,9 +81,9 @@ export class UI {
     const flash = this.questKey && q.title !== this.questTitle;
     this.questKey = key; this.questTitle = q.title;
     this.quest.style.opacity = 1;
-    this.quest.innerHTML = `<div class="qt">${q.title}</div>` +
+    this.quest.innerHTML = (q.short ? `<div class="qshort">⏵ ${q.short}</div>` : '') + `<div class="qt">${q.title}</div>` +
       q.lines.map((l) => `<div class="qline ${l.done ? 'done' : ''}"><span class="ck">${l.done ? '✔' : '◇'}</span><span>${l.text}</span></div>`).join('') +
-      (q.hint ? `<div class="qhint">${q.hint}</div>` : '') + (q.goal ? `<div class="qgoal">→ ${q.goal}</div>` : '');
+      (q.hint ? `<div class="qhint">${q.hint}</div>` : '') + (q.goal ? `<div class="qgoal">→ ${q.goal}</div>` : '') + (q.long ? `<div class="qlong">🏝 ${q.long}</div>` : '');
     if (flash) { this.quest.classList.remove('flash'); void this.quest.offsetWidth; this.quest.classList.add('flash'); }
   }
 
@@ -388,14 +388,16 @@ export class UI {
     RECIPES.forEach((r, i) => {
       const tier = TIERS.find((t) => t.id === (r.tier || 1));
       const open = tier.req(P);
-      if (tier.id !== lastTier) {
-        lastTier = tier.id;
+      const near = !r.station || this.g.nearStation(r.station);
+      const hdr = r.station ? 'st:' + r.station : tier.id;
+      if (hdr !== lastTier) {
+        lastTier = hdr;
         const h = document.createElement('div');
-        h.className = 'tierhdr' + (open ? '' : ' locked');
-        h.textContent = `${tier.id} · ${tier.name}${open ? '' : ' 🔒'}`;
+        h.className = 'tierhdr' + (open && near ? '' : ' locked');
+        h.textContent = r.station ? `🍳 ${STATIONS[r.station].name}${near ? '' : ' · ' + STATIONS[r.station].need}` : `${tier.id} · ${tier.name}${open ? '' : ' 🔒'}`;
         list.appendChild(h);
       }
-      const can = open && this.g.inv.has(r.cost);
+      const can = open && near && this.g.inv.has(r.cost);
       const b = document.createElement('button');
       b.className = 'citem' + (i === this.craftSel ? ' sel' : '') + (can ? ' can' : '') + (open ? '' : ' locked');
       b.innerHTML = `<img src="${this.icons.item(r.out)}"><span>${ITEMS[r.out].name}</span>`;
@@ -406,11 +408,12 @@ export class UI {
     const it = ITEMS[r.out];
     const tier = TIERS.find((t) => t.id === (r.tier || 1));
     const open = tier.req(P);
-    const can = open && this.g.inv.has(r.cost);
+    const near = !r.station || this.g.nearStation(r.station);
+    const can = open && near && this.g.inv.has(r.cost);
     const det = $('craft-detail');
     det.innerHTML = `<b style="color:#f5ecd6;font-size:16px">${it.name}</b><span style="font-size:12px">${it.desc}</span>
       <img class="big" src="${this.icons.item(r.out)}">${open ? this._costHtml(r.cost) : `<div class="set-note">🔒 Livello ${tier.id} · ${tier.name}<br>${tier.how}</div>`}
-      <button class="craft-btn" ${can ? '' : 'disabled'}>${open ? 'CREA' : 'BLOCCATO'}</button>`;
+      <button class="craft-btn" ${can ? '' : 'disabled'}>${!open ? 'BLOCCATO' : !near ? 'SERVE UN FALÒ' : r.station ? 'CUCINA' : 'CREA'}</button>`;
     det.querySelector('.craft-btn').addEventListener('click', () => { this.g.craft(r); this.refreshPanel(); });
   }
 
@@ -497,5 +500,12 @@ export class UI {
     det.innerHTML = `<b>${used}/${pl.store.slots.length} spazi usati</b><span style="font-size:12px">Tocca un oggetto nella cassa per riprenderlo, o nello zaino per depositarlo.</span>
       <button class="craft-btn" id="chest-all">DEPOSITA TUTTO</button>`;
     det.querySelector('#chest-all').addEventListener('click', () => { this.g.depositAll(pl.store); this.refreshPanel(); });
+  }
+
+  setBuffs(list) {
+    const key = list.join('|');
+    if (key === this._buffKey) return;
+    this._buffKey = key;
+    $('buffs').innerHTML = list.map((t) => `<span>${t}</span>`).join('');
   }
 }

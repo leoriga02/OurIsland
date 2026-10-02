@@ -15,11 +15,13 @@ import { Wildlife } from '../entities/wildlife.js';
 import { Birds } from '../entities/birds.js';
 import { Input } from '../input.js';
 import { Inventory, HOTBAR } from './inventory.js';
-import { ITEMS, RECIPES, PIECES, FREE_PLACE, WEAPON_DMG, COOKING, STORAGE, TIERS, tierUnlocked, itemMesh } from './items.js';
+import { ITEMS, RECIPES, PIECES, FREE_PLACE, WEAPON_DMG, COOKING, STORAGE, TIERS, BUFFS, STATIONS, tierUnlocked, itemMesh } from './items.js';
 import { Caches, BLUEPRINTS } from './caches.js';
+import { Base, COOP, COLLECTOR } from './base.js';
+import { Fishing } from './fishing.js';
 import { Farming, CROPS, SEED_CROP } from './farming.js';
 import { Building, pieceObject } from './building.js';
-import { QUESTS, FREE_PLAY, LEGACY_ORDER } from './quests.js';
+import { QUESTS, FREE_PLAY, LEGACY_ORDER, SELF_SUFFICIENCY } from './quests.js';
 import { Fx } from '../fx/fx.js';
 import { Audio } from '../fx/audio.js';
 import { UI } from '../ui/ui.js';
@@ -29,7 +31,7 @@ import { clamp } from '../util/noise.js';
 
 const SAVE_KEY = 'ourisland-save-v2'; // v2: Island 2.0 layout (v1 saves belong to the old island)
 // Save format version inside SAVE_KEY. Bump it and add a step to migrateSave() whenever the format changes.
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 function migrateSave(d) {
   if (!d || typeof d.v !== 'number') return null;
   if (d.v < 3) { d.progress = d.progress || {}; d.progress.playTime = d.progress.playTime || 0; d.v = 3; } // v3: play clock (crops), farm plots
@@ -38,11 +40,12 @@ function migrateSave(d) {
     d.questId = old ? old : 'done';
     d.v = 4;
   }
+  if (d.v < 5) { d.drift = d.drift || []; if (d.questId === 'done') d.questId = 'water'; d.v = 5; } // v5: coops, water collectors, drift crates, buffs (all optional fields)
   return d.v === SAVE_VERSION ? d : null;
 }
 const GUEST_KEY = 'ourisland-guest-v1'; // a guest keeps their own backpack & progress; the world belongs to the host
-const REACH = { pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0, farm_plot: 1.6, animal: 2.0, cache: 1.6, chest: 1.6, big_chest: 1.7 };
-const PLACED0 = { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0, farm_plot: 0, chest: 0, big_chest: 0 };
+const REACH = { coop: 2.4, water_collector: 1.7, pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0, farm_plot: 1.6, animal: 2.0, cache: 1.6, chest: 1.6, big_chest: 1.7 };
+const PLACED0 = { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0, farm_plot: 0, chest: 0, big_chest: 0, coop: 0, water_collector: 0 };
 
 export class Game {
   constructor({ renderer, scene, camera, quality, canvas, mode = 'solo' }) {
@@ -54,7 +57,7 @@ export class Game {
     this.started = false;
     this.dead = false;
     this.stats = { health: 100, water: 72, food: 80 };
-    this.progress = { col: {}, crafted: {}, ate: {}, placed: { ...PLACED0 }, felled: 0, drank: 0, slept: 0, reachedPeak: false, playTime: 0, killed: {}, caches: {}, blueprints: {}, planted: 0, harvested: 0 };
+    this.progress = { col: {}, crafted: {}, ate: {}, placed: { ...PLACED0 }, felled: 0, drank: 0, slept: 0, reachedPeak: false, playTime: 0, killed: {}, caches: {}, blueprints: {}, planted: 0, harvested: 0, fished: 0, cooked: 0, eggs: 0, collected: 0, buffs: {}, nextDrift: 240 };
     this.questIndex = 0;
     this.actionCooldown = 0;
     this.settings = { sfx: true, music: true, quality: quality >= 1 ? 'high' : 'low', follow: true, character: mode === 'guest' ? 'f' : 'm', name: '', view: 'fp' };
@@ -84,6 +87,8 @@ export class Game {
     this.wildlife = new Wildlife(scene, this.terrain, { test: new URLSearchParams(location.search).has('testfauna') });
     this.farming = new Farming(this);
     this.caches = new Caches(scene, this.terrain, this.nature);
+    this.base = new Base(this);
+    this.fishing = new Fishing(this);
     // subtle ring under whatever the action button will use
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.7, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0.0, depthWrite: false }));
     this.ring.renderOrder = 3;
@@ -180,7 +185,8 @@ export class Game {
     const s = this.inv.slots[i];
     if (!s) return;
     const it = ITEMS[s.id];
-    if (it.food) { this.eat(i); return; }
+    if (it.use === 'bottle') { this.openBottle(i); return; }
+    if (it.food || it.health > 0 || it.water) { this.eat(i); return; }
     if (it.place) {
       if (this.building.active) this.toggleBuild(false);
       this.toggleBuild(true, it.place);
@@ -215,8 +221,8 @@ export class Game {
     if (!id) { c.setHeld(null); this.fx.torch = null; return; }
     const vm = itemMesh(id);
     vm.castShadow = false;
-    vm.scale.setScalar(0.9);
-    vm.rotation.set(-0.15, 0.55, -0.1);
+    vm.scale.setScalar(id === 'fishing_rod' ? 0.42 : 0.9);
+    if (id === 'fishing_rod') vm.rotation.set(-0.95, 0.25, -0.15); else vm.rotation.set(-0.15, 0.55, -0.1);
     this.viewModel.add(vm);
     this.viewModel.position.set(0.3, -0.36, -0.55);
     const m = itemMesh(id);
@@ -275,6 +281,8 @@ export class Game {
   recipeUnlocked(r) { return tierUnlocked(r.tier, this.progress); }
   craft(r) {
     if (!this.recipeUnlocked(r)) { this.ui.toast(null, 'Non ancora sbloccato', true); this.audio.error(); return; }
+    if (r.station && !this.nearStation(r.station)) { this.ui.toast(null, STATIONS[r.station].need, true); this.audio.error(); return; }
+    if (r.station) { this.progress.cooked = (this.progress.cooked || 0) + 1; this.progress.meals = (this.progress.meals || 0) + 1; }
     if (!this.inv.consume(r.cost)) { this.audio.error(); return; }
     const n = r.n || 1;
     const left = this.inv.add(r.out, n);
@@ -293,16 +301,16 @@ export class Game {
   eat(i) {
     const s = this.inv.slots[i];
     const it = ITEMS[s.id];
-    if (this.player.char.busy) return;
     const id = s.id;
     this.inv.removeAt(i, 1);
-    this.player.char.play('eat', 0.8);
+    if (!this.player.char.busy) this.player.char.play('eat', 0.8);
     this.audio.eat();
     const S = this.stats;
     S.food = clamp(S.food + (it.food || 0), 0, 100);
     S.water = clamp(S.water + (it.water || 0), 0, 100);
     S.health = clamp(S.health + (it.health || 0), 0, 100);
     this.progress.ate[id] = (this.progress.ate[id] || 0) + 1;
+    if (it.buff) this.applyBuff(it.buff);
     const parts = [];
     if (it.food) parts.push(`+${it.food} cibo`);
     if (it.water) parts.push(`+${it.water} acqua`);
@@ -388,6 +396,11 @@ export class Game {
   }
 
   describe(t) {
+    if (this.rodAction(t)) return this.fishing.describe();
+    return this.describe2(t);
+  }
+
+  describe2(t) {
     if (!t) {
       const tool = this.heldTool();
       if (tool && tool !== 'torch') return { label: 'Colpisci', icon: 'item:' + tool, ready: false };
@@ -419,6 +432,15 @@ export class Game {
       }
       case 'cache': return { label: 'Apri', icon: 'hand', ready: true, name: o.label };
       case 'chest': case 'big_chest': return { label: 'Apri', icon: 'hand', ready: true, name: ITEMS[t.kind].name };
+      case 'coop': {
+        const d = o.ref.data || {}, act = this.coopAction(o.ref);
+        const name = `Pollaio · ${d.hens || 0} galline · mangime ${d.feed || 0}${d.hatch != null ? ' · uovo in cova' : ''}`;
+        return act ? { label: act.label, icon: act.icon, ready: true, name } : { label: 'Serve mais o un uovo', icon: 'hand', ready: false, name };
+      }
+      case 'water_collector': {
+        const w = o.ref.data?.water || 0;
+        return { label: w > 0 ? 'Bevi' : 'Vuoto', icon: 'drink', ready: w > 0, name: `Raccoglitore · ${w}/${COLLECTOR.max}` };
+      }
       case 'animal': {
         const w = this.heldTool();
         return { label: 'Attacca', icon: w && w !== 'torch' ? 'item:' + w : 'hand', ready: true, name: o.label, hp: o.hp < o.sp.hp ? o.hp / o.sp.hp : null };
@@ -438,6 +460,7 @@ export class Game {
     const t = this.target;
     const P = this.player, c = P.char;
     if (c.busy || P.swimming || this.dead) return;
+    if (this.rodAction(t)) { this.fishing.action(); this.actionCooldown = 0.45; return; }
     if (!t) {
       const tool = this.heldTool();
       if (tool && tool !== 'torch') { c.play('chop', 0.6); this.audio.swing(); this.actionCooldown = 0.65; }
@@ -464,6 +487,7 @@ export class Game {
             this.audio.rustle();
           } else {
             this.give('berries', 2 + Math.floor(Math.random() * 2), false, new THREE.Vector3(o.x, o.y + 0.9, o.z));
+            if (Math.random() < 0.25) this.give('herb_seed', 1, false, new THREE.Vector3(o.x, o.y + 0.7, o.z));
             this.nature.remove(o, 200, time);
             this.emit('remove', { i: o.id, d: 200 });
             this.fx.burst('berry', new THREE.Vector3(o.x, o.y + 0.9, o.z), 8);
@@ -574,6 +598,7 @@ export class Game {
               const done = COOKING[raw];
               this.inv.add(done, 1);
               this.progress.crafted[done] = (this.progress.crafted[done] || 0) + 1;
+              this.progress.cooked = (this.progress.cooked || 0) + 1;
               this.ui.toast(done, `${ITEMS[done].name} pronto!`);
               this.audio.craft();
               this.checkQuest();
@@ -590,8 +615,8 @@ export class Game {
         this.faceTarget(o);
         c.play('gather', 0.7, () => {
           if (o.opened) return;
-          this.caches.open(o);
-          this.progress.caches[o.id] = true;
+          if (o.drift) { o.opened = true; o.alive = false; setTimeout(() => this.caches.removeDrift(o, this.scene), 900); this.progress.drifts = (this.progress.drifts || 0) + 1; }
+          else { this.caches.open(o); this.progress.caches[o.id] = true; }
           this.audio.chest();
           const at = new THREE.Vector3(o.x, o.y + 0.7, o.z);
           this.fx.sparkle(at, 14, 0xffe2a0);
@@ -613,6 +638,28 @@ export class Game {
         this.openChest = o.ref;
         this.ui.openPanel('chest');
         this.actionCooldown = 0.5;
+        break;
+      }
+      case 'coop': {
+        const pl = o.ref, act = this.coopAction(pl);
+        this.faceTarget(o);
+        if (!act) { this.ui.toast('corn', 'Dai mais alle galline, oppure metti a covare un uovo', true); this.audio.error(); this.actionCooldown = 1; return; }
+        c.play('gather', 0.6, () => act.run(), 0.5);
+        this.actionCooldown = 0.7;
+        break;
+      }
+      case 'water_collector': {
+        const pl = o.ref;
+        this.faceTarget(o);
+        c.play('drink', 0.9, () => {
+          if (!this.base.drink(pl)) return;
+          this.stats.water = clamp(this.stats.water + COLLECTOR.drink, 0, 100);
+          this.progress.drank++; this.progress.collected = (this.progress.collected || 0) + 1;
+          this.audio.drink();
+          this.ui.toast(null, `💧 +${COLLECTOR.drink} acqua · restano ${pl.data.water}`);
+          this.checkQuest();
+        }, 0.5);
+        this.actionCooldown = 1;
         break;
       }
       case 'farm_plot': {
@@ -777,8 +824,58 @@ export class Game {
     this.inv.emit({ moved: true });
   }
 
+  // world event: every few minutes of play something useful washes ashore (max 2 waiting)
+  updateDrift() {
+    const pr = this.progress;
+    if (this.mode === 'guest' || pr.playTime < (pr.nextDrift ?? 240)) return;
+    pr.nextDrift = pr.playTime + 360 + Math.random() * 240;
+    if (this.caches.list.filter((c) => c.drift).length >= 2) return;
+    const c = this.caches.spawnDrift(this.terrain, this.scene);
+    if (c) { this.ui.toast(null, '🌊 Il mare ha portato qualcosa a riva… (vedi la mappa)'); this.audio.splash(); }
+  }
+
   rawFood() { return Object.keys(COOKING).find((id) => this.inv.count(id) > 0) || null; }
-  seedInBag() { return Object.keys(SEED_CROP).find((id) => this.inv.count(id) > 0) || null; }
+  // with the rod in hand, water (and empty aim) means fishing; other ready targets keep their own action
+  rodAction(t) { return this.heldTool() === 'fishing_rod' && (this.fishing.active || !t || t.kind === 'water' || !this.describe2(t).ready); }
+
+  // the held seed if any, else the first seed in the bag
+  seedInBag() {
+    const held = this.inv.slots[this.selected]?.id;
+    if (held && SEED_CROP[held]) return held;
+    return Object.keys(SEED_CROP).find((id) => this.inv.count(id) > 0) || null;
+  }
+
+  // the one sensible thing to do at a coop right now
+  coopAction(pl) {
+    if (!pl.data) this.base.init(pl);
+    const d = pl.data;
+    if (d.eggs > 0) return { label: `Raccogli uova (${d.eggs})`, icon: 'item:egg', run: () => { const n = this.base.takeEggs(pl); this.give('egg', n, false, new THREE.Vector3(pl.x, pl.y + 0.8, pl.z)); this.progress.eggs = (this.progress.eggs || 0) + n; this.audio.cluck(); this.checkQuest(); this.save(); } };
+    const hatch = () => { if (!this.inv.remove('egg', 1)) return; this.base.startHatch(pl); this.ui.toast('egg', d.feed > 0 ? 'Uovo in cova: tra poco una gallina!' : 'Uovo in cova: serve mais per farlo schiudere', d.feed <= 0); this.save(); };
+    if (d.hens === 0 && d.hatch == null && this.inv.count('egg') > 0) return { label: 'Cova un uovo', icon: 'item:egg', run: hatch };
+    if (this.inv.count('corn') > 0 && d.feed < COOP.maxFeed) return { label: `Dai mais (${d.feed})`, icon: 'item:corn', run: () => { const n = this.base.addFeed(pl, Math.min(5, this.inv.count('corn'))); this.inv.remove('corn', n); this.ui.toast('corn', `+${n} mangime nel pollaio`); this.audio.cluck(); this.save(); } };
+    if (d.hatch == null && d.hens < COOP.maxHens && this.inv.count('egg') > 0) return { label: 'Cova un uovo', icon: 'item:egg', run: hatch };
+    return null;
+  }
+
+  nearStation(st) {
+    const P = this.player.pos;
+    return this.building.placeables.some((p) => p.type === st && Math.hypot(p.x - P.x, p.z - P.z) < 4.5);
+  }
+
+  applyBuff(b) {
+    this.progress.buffs[b.id] = Math.max(this.progress.buffs[b.id] || 0, this.progress.playTime) + b.dur;
+    this.ui.center(`${BUFFS[b.id].icon} ${BUFFS[b.id].name}`, `per ${Math.round(b.dur / 60)} min`, 1600);
+  }
+  hasBuff(id) { return (this.progress.buffs?.[id] || 0) > (this.progress.playTime || 0); }
+
+  openBottle(i) {
+    this.inv.removeAt(i, 1);
+    const pool = [['potato', 3], ['corn_seed', 3], ['herb_seed', 3], ['pineapple_top', 2], ['rope', 2]];
+    const [id, n] = pool[Math.floor(Math.random() * pool.length)];
+    this.audio.chest();
+    this.ui.center('Un messaggio…', '«Chi trova questa bottiglia, coltivi la sua isola.»', 2600);
+    this.give(id, n, false, this.player.pos.clone().add(new THREE.Vector3(0, 1.2, 0)));
+  }
 
   hurtPlayer(dmg, from) {
     if (this.dead || !this.started) return;
@@ -812,6 +909,7 @@ export class Game {
     }
     this.inv.consume(cost);
     B.placePiece(piece, t, true);
+    if (piece === 'coop' || piece === 'water_collector') this.base.init(B.placeables[B.placeables.length - 1]);
     this.emit('build', { type: piece, tg: { i: t.i, j: t.j, d: t.d, x: t.x, y: t.y, z: t.z, rot: t.rot, level: t.level } });
     this.audio.build();
     this.player.char.play('build', 0.5);
@@ -843,9 +941,22 @@ export class Game {
 
   // ---------------- quests ----------------
   currentQuest() {
-    if (this.questIndex >= QUESTS.length) return FREE_PLAY(this.progress);
-    const q = QUESTS[this.questIndex];
-    return { title: q.title, lines: q.lines(this.progress), hint: q.hint, goal: q.goal };
+    const pr = this.progress;
+    const base = this.questIndex >= QUESTS.length ? FREE_PLAY(pr) : (() => { const q = QUESTS[this.questIndex]; return { title: q.title, lines: q.lines(pr), hint: q.hint, goal: q.goal }; })();
+    // three levels at once: right now (short), the objective (medium), the self-sufficient base (long)
+    base.short = this.shortGoal();
+    if (pr.shelterDone || this.questIndex >= 11) base.long = `Autosufficienza ${SELF_SUFFICIENCY.filter((g) => g.done(pr)).length}/${SELF_SUFFICIENCY.length}`;
+    return base;
+  }
+  shortGoal() {
+    const S = this.stats;
+    if (S.water < 30) return this.base.collectors().some((p) => p.data?.water > 0) ? 'Bevi al raccoglitore' : 'Bevi qualcosa';
+    if (S.food < 30) return 'Mangia qualcosa';
+    if (S.health < 35 && this.inv.count('bandage')) return 'Usa un impacco di erbe';
+    if (this.farming.plots().some((p) => this.farming.ripe(p))) return 'L’orto è pronto da raccogliere';
+    if (this.base.coops().some((p) => p.data?.eggs > 0)) return 'Ci sono uova nel pollaio';
+    if (this.caches.list.some((c) => c.drift && !c.opened)) return 'Una cassa è arrivata sulla spiaggia';
+    return null;
   }
 
   checkQuest() {
@@ -871,10 +982,11 @@ export class Game {
   // ---------------- survival ----------------
   updateSurvival(dt) {
     const S = this.stats, P = this.player;
-    const exert = P.running ? 1.7 : P.swimming ? 1.5 : 1;
+    const exert = (P.running ? 1.7 : P.swimming ? 1.5 : 1) * (this.hasBuff('energia') && (P.running || P.swimming) ? 0.6 : 1);
     const nearFire = this.building.placeables.some((p) => p.type === 'campfire' && Math.hypot(p.x - P.pos.x, p.z - P.pos.z) < 5);
     S.water -= dt * 0.16 * exert;
-    S.food -= dt * 0.105 * exert;
+    S.food -= dt * 0.105 * exert * (this.hasBuff('sazio') ? 0.5 : 1);
+    if (this.hasBuff('rigenera')) S.health += dt * 0.6;
     if (S.water <= 0 || S.food <= 0) {
       S.health -= dt * (S.water <= 0 && S.food <= 0 ? 1.6 : 0.8);
       if (!this._starveWarn || this.time - this._starveWarn > 12) { this._starveWarn = this.time; this.ui.toast(null, S.water <= 0 ? 'Sei disidratato!' : 'Stai morendo di fame!', true); this.audio.hurt(); }
@@ -925,7 +1037,7 @@ export class Game {
       const data = {
         v: SAVE_VERSION, savedAt: Date.now(), stats: this.stats, progress: this.progress, questIndex: this.questIndex, questId: QUESTS[this.questIndex]?.id || 'done', inv: this.inv.toJSON(), selected: this.selected,
         time: this.sky.time, day: this.sky.day, player: { x: this.player.pos.x, z: this.player.pos.z, f: this.player.facing },
-        building: this.building.toJSON(), respawn: this.respawn, depleted,
+        building: this.building.toJSON(), respawn: this.respawn, depleted, drift: this.caches.driftJSON(),
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
       return true;
@@ -1044,6 +1156,9 @@ export class Game {
     for (const p of this.farming.plots()) this.farming.refresh(p);
     for (const k of ['caches', 'blueprints', 'killed']) this.progress[k] = this.progress[k] || {};
     this.caches.load(Object.keys(this.progress.caches));
+    for (const dr of d.drift || []) this.caches.spawnDrift(this.terrain, this.scene, dr);
+    for (const p of this.building.placeables) if (p.type === 'coop' || p.type === 'water_collector') this.base.init(p);
+    this.progress.buffs = this.progress.buffs || {};
     this.syncPlacedCounts();
     this.respawn = d.respawn || this.respawn;
     for (const [i, rem] of d.depleted || []) {
@@ -1099,7 +1214,13 @@ export class Game {
     this.crabs.update(dt, P, this.time);
     this.wildlife.onSound = (a, kind) => { if (a.id === 'boar') this.audio.grunt(); else if (kind !== 'aggro') this.audio.cluck(); };
     this.wildlife.update(dt, P, this.time, (a, dmg) => this.hurtPlayer(dmg, a));
-    if (this.started) { this.progress.playTime = (this.progress.playTime || 0) + dt; this.farming.update(dt); }
+    if (this.started) {
+      this.progress.playTime = (this.progress.playTime || 0) + dt;
+      this.farming.update(dt);
+      this.base.update(dt);
+      this.fishing.update(dt);
+      this.updateDrift();
+    }
     this.birds.update(dt, this.sky.night);
     this.props.update(dt, this.time);
     this.building.animate(dt);
@@ -1169,6 +1290,7 @@ export class Game {
     if (this.hudT <= 0) {
       this.hudT = 0.1;
       const markers = [{ x: this.terrain.pond.x, z: this.terrain.pond.z, color: '#4fc8ff', r: 6, glyph: '~' }];
+      for (const c of this.caches.list) if (c.drift && !c.opened) markers.push({ x: c.x, z: c.z, color: '#f4f1e6', r: 4.5, glyph: '' });
       for (const p of this.building.placeables) markers.push({ x: p.x, z: p.z, color: p.type === 'campfire' ? '#ff8a2a' : '#e8b04a', r: 4 });
       for (const [k] of this.building.cells) { const [i, j] = k.split(',').map(Number); markers.push({ x: (i + 0.5) * 3, z: (j + 0.5) * 3, color: '#c89050', r: 3 }); }
       const R = this.coop?.remote;
@@ -1176,6 +1298,7 @@ export class Game {
       this.ui.drawMinimap(P, markers);
       this.ui.setPartner(this.coop);
       this.ui.setClock(this.sky.hours, this.sky.day);
+      this.ui.setBuffs(Object.keys(BUFFS).filter((id) => this.hasBuff(id)).map((id) => `${BUFFS[id].icon} ${BUFFS[id].name} ${Math.ceil((this.progress.buffs[id] - this.progress.playTime) / 60)}′`));
     }
     // ambience
     this.audio.update(dt, { coastDist: this.terrain.coastDist(P.pos.x, P.pos.z), night: this.sky.night, altitude: P.pos.y, underCover: this.building.isSheltered(P.pos.x, P.pos.z) });

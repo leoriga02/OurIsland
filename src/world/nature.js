@@ -214,7 +214,7 @@ export class Nature {
     const T = this.terrain, M = this.M, R = this.rnd, scene = this.scene;
     const pondOk = (x, z, pad) => !T.isInPond(x, z, pad);
     this.pickupPools = {};
-    for (const id of ['stick', 'stone', 'coconut', 'wood']) {
+    for (const id of ['stick', 'stone', 'coconut', 'wood', 'egg']) {
       this.pickupPools[id] = new Pool(scene, [{ geo: itemGeometry(id), mat: itemMaterial }], 520, { near: 30, far: 90 });
     }
 
@@ -546,6 +546,9 @@ export class Nature {
     for (const o of this.occupied.map.values()) for (const c of o) if (c.r > 2.5 && c.r < 6) spots.push({ x: c.x, z: c.z, r: c.r * 1.3, k: 0.3 });
     if (T.mesh) T.bakeOcclusion(spots);
 
+    // wild bird nests in the jungle: eggs to eat or to hatch in a coop (placed last so older saves keep their resource ids)
+    this.sample(({ jw, slope, pd, h }) => jw > 0.5 && slope < 0.3 && pd > 3 && h > 3, 20000).slice(0, 40)
+      .forEach(({ x, z }) => this._pickup('egg', x, z));
     this.pools = [...this.fernPools, ...this.boulderPools, ...this.cliffPools, ...(this.shelfPool ? [this.shelfPool] : []), ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...plantPools.map((p) => p.pool), ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
     for (const p of this.pools) p.finalize();
     this.cliffRocks = cliffRocks;
@@ -561,11 +564,11 @@ export class Nature {
     const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
     _q.multiply(qy);
     const s = id === 'wood' ? 1.8 : 1.15;
-    const lift = { stick: 0.03, stone: 0.05, coconut: 0.1, wood: 0.18 }[id];
+    const lift = { stick: 0.03, stone: 0.05, coconut: 0.1, wood: 0.18, egg: 0.06 }[id];
     _m.compose(_p.set(x, y + lift, z), _q, _s.set(s, s, s));
     const idx = pool.add(_m);
     if (idx < 0) return;
-    const labels = { stick: 'Bastone', stone: 'Pietra', coconut: 'Cocco', wood: 'Legno trasportato' };
+    const labels = { stick: 'Bastone', stone: 'Pietra', coconut: 'Cocco', wood: 'Legno trasportato', egg: 'Uovo selvatico' };
     this.addResource({ kind: 'pickup', item: id, x, z, y, r: 0.45, hp: 1, pool, idx, label: labels[id] });
   }
 

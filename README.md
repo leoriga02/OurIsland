@@ -17,6 +17,15 @@ Seven one-time supply caches sit at the island's landmarks.
 
 **Building:** the placement preview is green or red, grid pieces snap, and objects can be rotated or cancelled. *Smonta* (or X) dismantles a piece for half its cost back; placed items come back whole.
 
+**Self-sufficient base:**
+- **Food crops:** potatoes, corn, medicinal herbs and pineapple. Each has its own seed and use; seeds come from caches, berry bushes, crates washed ashore and every harvest.
+- **Coop (*Pollaio*):** hatch wild jungle eggs, feed corn, collect eggs; well-fed hens breed. Hens are drawn only once `assets/external/animals/chicken.glb` exists; until then the coop shows eggs and a hen count.
+- **Fishing:** cast, wait for the float to dip, pull. Sea and pond fish, with the occasional grouper or message in a bottle.
+- **Cooking:** campfire dishes give short buffs: *Sazio* (half hunger), *Energia* (running tires less), *Rigenerazione*.
+- **Water collector:** fills over play time.
+- **World event:** crates now and then wash up on a beach and show on the map.
+- **Goals:** the HUD shows three levels: right now, the current objective, and progress towards a self-sufficient base.
+
 **Survival systems:**
 - **Farming:** wild fiber plants drop sprouts. Plant them in a crafted farm plot (Orto); they grow on played time and harvest into fiber plus new sprouts.
 - **Wildlife and combat:** boars and chickens appear once their models are added (see `assets/external/animals/`). Boars chase and attack within a limited range. Fight with the craftable spear (Lancia) or any tool; boars drop meat and hide, and meat can be cooked at a campfire.

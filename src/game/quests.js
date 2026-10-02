@@ -104,17 +104,65 @@ export const QUESTS = [
     ],
     hint: 'Dormire di notte ti porta al mattino e imposta il punto di rinascita.',
   },
+  {
+    id: 'water', title: 'Acqua alla base',
+    lines: (s) => [
+      { text: 'Costruisci un raccoglitore d’acqua', done: (s.placed.water_collector || 0) >= 1 },
+      { text: 'Bevi dal raccoglitore', done: (s.collected || 0) >= 1 },
+    ],
+    hint: 'Si riempie da solo col tempo. Niente più viaggi alla cascata.',
+    goal: 'Acqua sicura ogni giorno',
+  },
+  {
+    id: 'crops', title: 'Cibo dall’orto',
+    lines: (s) => [{ text: 'Raccogli patate, mais, erbe o ananas', done: foodHarvests(s) >= 1 }],
+    hint: 'I semi arrivano dalle casse del relitto, dai cespugli di bacche e dalle casse portate dal mare.',
+    goal: 'Il cibo non dipenderà più dalla fortuna',
+  },
+  {
+    id: 'fish', title: 'Pesca',
+    lines: (s) => [
+      { text: 'Crea una canna da pesca', done: (s.crafted.fishing_rod || 0) >= 1 },
+      { text: 'Pesca un pesce', done: (s.fished || 0) >= 1 },
+    ],
+    hint: 'Equipaggia la canna, guarda l’acqua e premi azione. Quando il galleggiante affonda: tira!',
+    goal: 'Un’alternativa alla caccia',
+  },
+  {
+    id: 'cook', title: 'Ai fornelli',
+    lines: (s) => [{ text: 'Prepara un piatto vicino al falò', done: (s.meals || 0) >= 1 }],
+    hint: 'Nella scheda Crea, sezione Cucina. I piatti danno effetti utili per qualche minuto.',
+    goal: 'Pasti migliori, più energia',
+  },
+  {
+    id: 'coop', title: 'Il pollaio',
+    lines: (s) => [
+      { text: 'Costruisci un pollaio', done: (s.placed.coop || 0) >= 1 },
+      { text: 'Raccogli un uovo dal pollaio', done: (s.eggs || 0) >= 1 },
+    ],
+    hint: 'Metti a covare un uovo selvatico (nei nidi della giungla) e dai mais alle galline.',
+    goal: 'Uova ogni giorno',
+  },
+];
+
+const foodHarvests = (s) => ['potato', 'corn', 'herb', 'pineapple'].reduce((a, k) => a + ((s.harvestedCrops || {})[k] || 0), 0);
+
+// long-term goal: a base that keeps you alive on its own
+export const SELF_SUFFICIENCY = [
+  { text: 'Rifugio', done: (s) => !!s.shelterDone },
+  { text: 'Acqua alla base', done: (s) => (s.placed.water_collector || 0) >= 1 },
+  { text: 'Orto di cibo', done: (s) => foodHarvests(s) >= 1 },
+  { text: 'Fibra coltivata', done: (s) => ((s.harvestedCrops || {}).fiber || 0) >= 1 },
+  { text: 'Galline', done: (s) => (s.eggs || 0) >= 1 },
+  { text: 'Scorte in cassa', done: (s) => (s.placed.chest || 0) + (s.placed.big_chest || 0) >= 1 },
 ];
 
 export const FREE_PLAY = (s) => ({
-  title: 'Esplora l’isola',
-  lines: [
-    { text: `Trova le scorte nascoste (${Object.keys(s.caches || {}).length}/7)`, done: Object.keys(s.caches || {}).length >= 7 },
-    { text: 'Trova un progetto per attrezzi migliori', done: !!s.blueprints?.tools2 },
-    { text: 'Sali fino ai piedi dei picchi carsici', done: s.reachedPeak },
-  ],
+  title: 'Base autosufficiente',
+  lines: SELF_SUFFICIENCY.filter((g) => !g.done(s)).slice(0, 2).map((g) => ({ text: g.text, done: false }))
+    .concat([{ text: `Trova le scorte nascoste (${Object.keys(s.caches || {}).length}/7)`, done: Object.keys(s.caches || {}).length >= 7 }]),
   hint: 'Cascata, grotta, caletta nascosta, belvedere e scogliere nascondono casse utili.',
-  goal: 'Sblocca nuovi progetti e materiali rari',
+  goal: 'Più la base è completa, più la vita sull’isola è facile',
 });
 
 // order of the old (v3 and earlier) quest list, to convert saved questIndex values
