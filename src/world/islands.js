@@ -7,28 +7,44 @@ import { materials } from './materials.js';
 const C = (hex) => new THREE.Color(hex);
 const SAND = C(0xe8d3a0), GRASS = C(0x4a8a2c), JUNGLE = C(0x2f6a20), ROCK = C(0xa89f90), ROCK2 = C(0x7a7266), SEABED = C(0x8fb8a8);
 
-// Builds one island. Returns { mesh, trees: [{x,y,z,s,kind}], coastR }
-function buildIsland(seed, cx, cz, R, H) {
+// Builds one island of a given character. Returns { mesh, trees: [{x,y,z,s,kind}], coastR }
+// types: jungle | karst (tower cluster) | atoll (ring + lagoon) | mesa | volcano | ridge (long) | rocks | horizon
+function buildIsland(seed, cx, cz, R, H, type = 'jungle', rot = 0) {
   const rnd = mulberry32(seed);
   const n1 = makeNoise2D(seed), n2 = makeNoise2D(seed + 5);
   const peaks = [];
-  const np = 1 + Math.floor(rnd() * 3);
+  const np = type === 'karst' ? 6 : type === 'rocks' ? 5 : type === 'jungle' ? 2 : 1;
   for (let i = 0; i < np; i++) {
-    const a = rnd() * Math.PI * 2, d = rnd() * R * 0.35;
-    peaks.push({ x: Math.cos(a) * d, z: Math.sin(a) * d, r: R * (0.26 + rnd() * 0.16), h: H * (0.55 + rnd() * 0.45) });
+    const a = rnd() * Math.PI * 2, d = rnd() * R * (type === 'karst' || type === 'rocks' ? 0.6 : 0.35);
+    const pr = type === 'karst' ? R * (0.12 + rnd() * 0.1) : type === 'rocks' ? R * (0.15 + rnd() * 0.12) : R * (0.26 + rnd() * 0.16);
+    peaks.push({ x: Math.cos(a) * d, z: Math.sin(a) * d, r: pr, h: H * (0.5 + rnd() * 0.5) });
   }
-  const height = (x, z) => {
+  const cr = Math.cos(rot), sr = Math.sin(rot);
+  const height = (x0, z0) => {
+    // elongated islands: squash the local frame
+    let x = x0 * cr + z0 * sr, z = -x0 * sr + z0 * cr;
+    if (type === 'ridge') z *= 2.6;
     const d = Math.hypot(x, z);
-    const coast = R * (1 + 0.14 * fbm(n1, x * 2.2 / R, z * 2.2 / R, 3));
-    const s = (coast - d) / R; // >0 inside
-    let h = s < 0 ? s * R * 0.35 : Math.min(s * R * 0.12, 1.2) + smoothstep(0.08, 0.6, s) * H * 0.35 * (0.6 + 0.4 * fbm(n2, x * 3 / R, z * 3 / R, 3));
+    const coast = R * (1 + 0.16 * fbm(n1, x * 2.2 / R, z * 2.2 / R, 3));
+    let s = (coast - d) / R; // >0 inside
+    if (type === 'atoll') s = 0.13 - Math.abs(d - R * 0.72) / R + 0.05 * n2(x * 3 / R, z * 3 / R);
+    let h = s < 0 ? s * R * 0.35 : Math.min(s * R * 0.12, 1.2);
+    if (type === 'atoll') return Math.max(s < 0 ? s * R * 0.25 : Math.min(s * R * 0.2, 2.2), -8);
+    if (type === 'jungle' || type === 'ridge' || type === 'horizon') h += smoothstep(0.08, 0.6, s) * H * (type === 'ridge' ? 0.8 : 0.4) * (0.6 + 0.4 * fbm(n2, x * 3 / R, z * 3 / R, 3));
+    if (type === 'mesa') h += H * smoothstep(0.12, 0.2, s + 0.03 * n2(x * 6 / R, z * 6 / R)) + H * 0.25 * smoothstep(0.35, 0.45, s);
+    if (type === 'volcano') {
+      const cone = H * Math.pow(Math.max(0, s), 0.9) * 1.1;
+      const crater = H * 0.3 * smoothstep(0.16, 0.05, d / R);
+      h += Math.max(0, cone - crater) * (0.9 + 0.1 * n2(x * 5 / R, z * 5 / R));
+    }
     for (const p of peaks) {
       const dd = Math.hypot(x - p.x, z - p.z) / (p.r * (1 + 0.3 * n2(x * 4 / R, z * 4 / R)));
-      h = Math.max(h, h * 0.4 + p.h / (1 + Math.pow(dd, 5)) * smoothstep(-0.05, 0.15, s));
+      const pw = type === 'karst' ? 7 : 5;
+      h = Math.max(h, h * 0.4 + p.h / (1 + Math.pow(dd, pw)) * smoothstep(-0.05, 0.15, s + (type === 'rocks' ? 0.2 : 0)));
     }
     return Math.max(h, -8);
   };
-  const N = 44, ext = R * 1.25, step = (ext * 2) / N;
+  const N = R > 200 ? 64 : 48, ext = R * (type === 'ridge' ? 1.3 : 1.25), step = (ext * 2) / N;
   const pos = [], col = [], idx = [];
   const hs = [];
   for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
@@ -58,34 +74,38 @@ function buildIsland(seed, cx, cz, R, H) {
       c.lerp(t, smoothstep(0.32, 0.55, slope));
       c.lerp(SAND, 1 - smoothstep(0.7, 1.5, h));
       // trees on gentle vegetated ground
-      if (h > 1.4 && slope < 0.42 && rnd() < 0.55) {
-        trees.push({ x: cx + x + (rnd() - 0.5) * step, y: h - 0.3, z: cz + z + (rnd() - 0.5) * step, s: 0.8 + rnd() * 0.5, kind: (h < 6 && rnd() < 0.85) || rnd() < 0.3 ? 'palm' : 'tree', r: rnd() * 6.28 });
+      if (type !== 'horizon' && type !== 'rocks' && h > 1.2 && slope < 0.42 && rnd() < (type === 'atoll' ? 0.8 : 0.55)) {
+        trees.push({ x: cx + x + (rnd() - 0.5) * step, y: h - 0.3, z: cz + z + (rnd() - 0.5) * step, s: 0.8 + rnd() * 0.5, kind: type === 'atoll' || (h < 6 && rnd() < 0.85) || rnd() < 0.25 ? 'palm' : 'tree', r: rnd() * 6.28 });
       }
     }
     col.push(c.r, c.g, c.b);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.translate(cx, 0, cz);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  const mesh = new THREE.Mesh(geo, materials().scanIsland || new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
   return { mesh, trees, coastR: R };
 }
 
 export class DistantIslands {
   constructor(scene) {
     this.list = [];
-    const r = mulberry32(2024);
-    const specs = [];
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * Math.PI * 2 + r() * 0.5 + 0.2;
-      const d = 620 + r() * 480;
-      specs.push({ x: Math.cos(a) * d, z: Math.sin(a) * d, R: 40 + r() * 70, H: 30 + r() * 55 });
-    }
-    // a couple of small islets closer in, visible from the beaches
-    specs.push({ x: 360, z: 280, R: 30, H: 28 }, { x: -380, z: 210, R: 34, H: 34 });
+    // each with its own silhouette and character; all out of reach for now
+    const specs = [
+      { x: 700, z: -650, R: 95, H: 115, type: 'karst' },       // cluster of sheer limestone towers
+      { x: 660, z: 600, R: 115, H: 3, type: 'atoll' },         // low palm ring around a lagoon
+      { x: -960, z: -150, R: 160, H: 150, type: 'volcano' },   // big cone with a crater
+      { x: -150, z: -980, R: 125, H: 62, type: 'mesa' },       // flat-topped plateau
+      { x: 1080, z: 160, R: 150, H: 58, type: 'ridge', rot: 0.4 }, // long forested ridge
+      { x: -760, z: 660, R: 105, H: 52, type: 'jungle' },
+      { x: 160, z: 820, R: 55, H: 22, type: 'rocks' },         // scattered bare rocks
+      { x: -1450, z: -1150, R: 320, H: 130, type: 'horizon' }, // hazy landmass on the horizon
+      { x: 580, z: -260, R: 26, H: 48, type: 'karst' },        // lone sentinel stack near the cove
+      { x: -640, z: -540, R: 62, H: 38, type: 'jungle' },
+    ];
     const allTrees = [];
     const geos = [];
     specs.forEach((s, k) => {
-      const isl = buildIsland(900 + k * 17, s.x, s.z, s.R, s.H);
+      const isl = buildIsland(900 + k * 17, s.x, s.z, s.R, s.H, s.type, s.rot || 0);
       geos.push(isl.mesh);
       scene.add(isl.mesh);
       allTrees.push(...isl.trees);

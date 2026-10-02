@@ -56,13 +56,13 @@ export class Coop {
     if (this.role === 'guest') {
       this.send({ t: 'hello', v: g.settings.character, name: g.settings.name });
     } else {
-      g.ui.toast(null, '🤝 Partner joined the island!');
+      g.ui.toast(null, '🤝 Il compagno è arrivato sull’isola!');
       g.audio.quest();
     }
   }
 
   onClose() {
-    this.g.ui.toast(null, 'Partner connection lost — reconnecting…', true);
+    this.g.ui.toast(null, 'Connessione col compagno persa, riconnessione…', true);
     if (this.remote) this.remote.lostAt = performance.now();
   }
 
@@ -142,7 +142,7 @@ export class Coop {
       g.rig.target.copy(g.player.pos);
       g.onCoopReady?.();
     }
-    g.ui.toast(null, '🤝 Connected to your partner');
+    g.ui.toast(null, '🤝 Connesso al compagno');
   }
 
   applyEvent(m) {
@@ -195,10 +195,10 @@ export class Coop {
     }
     const char = new Character(variant);
     this.g.scene.add(char.root);
-    const tag = nameTag(name || 'Partner');
+    const tag = nameTag(name || 'Compagno');
     char.root.add(tag);
     tag.position.y = 2.2;
-    this.remote = { char, variant, tag, pos: new THREE.Vector3(), facing: 0, held: null, stats: null, lostAt: 0, name: name || 'Partner' };
+    this.remote = { char, variant, tag, pos: new THREE.Vector3(), facing: 0, held: null, stats: null, lostAt: 0, name: name || 'Compagno' };
   }
 
   setRemoteHeld(id) {

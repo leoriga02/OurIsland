@@ -24,7 +24,7 @@ import { IconFactory } from '../ui/icons.js';
 import { flameTexture } from '../util/textures.js';
 import { clamp } from '../util/noise.js';
 
-const SAVE_KEY = 'ourisland-save-v1';
+const SAVE_KEY = 'ourisland-save-v2'; // v2: Island 2.0 layout (v1 saves belong to the old island)
 const GUEST_KEY = 'ourisland-guest-v1'; // a guest keeps their own backpack & progress; the world belongs to the host
 const REACH = { pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0 };
 
@@ -206,14 +206,14 @@ export class Game {
 
   toggleBuild(on = !this.building.active, piece) {
     if (on) {
-      if (this.player.swimming) { this.ui.toast(null, "Can't build while swimming", true); return; }
+      if (this.player.swimming) { this.ui.toast(null, 'Non puoi costruire mentre nuoti', true); return; }
       const p = piece || (PIECES[this.building.piece] ? this.building.piece : 'foundation');
       this.building.enter(p);
       const item = !PIECES[p];
       this.ui.showBuildBar(true, item ? ITEMS[p].name : null);
       this.buildHints = (this.buildHints || 0) + 1;
-      if (item) this.ui.center(`Place ${ITEMS[p].name}`, 'Aim with the camera · tap the action button', 1800);
-      else if (this.buildHints <= 2) this.ui.center('Build Mode', 'Aim with the camera · Place with the action button', 2200);
+      if (item) this.ui.center(`Posiziona: ${ITEMS[p].name}`, 'Mira con la visuale · tocca il tasto azione', 1800);
+      else if (this.buildHints <= 2) this.ui.center('Costruzione', 'Mira con la visuale · posiziona con il tasto azione', 2200);
     } else {
       this.building.exit();
       this.ui.showBuildBar(false);
@@ -225,9 +225,9 @@ export class Game {
     if (!this.inv.consume(r.cost)) { this.audio.error(); return; }
     const n = r.n || 1;
     const left = this.inv.add(r.out, n);
-    if (left) this.ui.toast(null, 'Backpack full!', true);
+    if (left) this.ui.toast(null, 'Zaino pieno!', true);
     this.progress.crafted[r.out] = (this.progress.crafted[r.out] || 0) + n;
-    this.ui.toast(r.out, `Crafted ${ITEMS[r.out].name}`);
+    this.ui.toast(r.out, `Creato: ${ITEMS[r.out].name}`);
     this.audio.craft();
     this.fx.sparkle(this.player.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), 12);
     if (ITEMS[r.out].tool && this.heldTool() === null) {
@@ -251,9 +251,9 @@ export class Game {
     S.health = clamp(S.health + (it.health || 0), 0, 100);
     this.progress.ate[id] = (this.progress.ate[id] || 0) + 1;
     const parts = [];
-    if (it.food) parts.push(`+${it.food} food`);
-    if (it.water) parts.push(`+${it.water} water`);
-    if (it.health) parts.push(`${it.health > 0 ? '+' : ''}${it.health} health`);
+    if (it.food) parts.push(`+${it.food} cibo`);
+    if (it.water) parts.push(`+${it.water} acqua`);
+    if (it.health) parts.push(`${it.health > 0 ? '+' : ''}${it.health} salute`);
     this.ui.toast(id, parts.join(' · '), (it.health || 0) < 0);
     this.checkQuest();
   }
@@ -293,7 +293,8 @@ export class Game {
       this.progress.col[id] = (this.progress.col[id] || 0) + (n - left);
       if (!silent) this.ui.toast(id, `+${n - left} ${ITEMS[id].name}`);
     }
-    if (left > 0) this.ui.toast(null, 'Backpack full!', true);
+    if (left > 0) this.ui.toast(null, 'Zaino pieno!', true);
+    this.checkQuest();
   }
 
   // ---------------- interaction ----------------
@@ -328,28 +329,28 @@ export class Game {
   describe(t) {
     if (!t) {
       const tool = this.heldTool();
-      if (tool && tool !== 'torch') return { label: 'Swing', icon: 'item:' + tool, ready: false };
-      return { label: 'Use', icon: 'hand', ready: false };
+      if (tool && tool !== 'torch') return { label: 'Colpisci', icon: 'item:' + tool, ready: false };
+      return { label: 'Usa', icon: 'hand', ready: false };
     }
     const o = t.o;
     switch (t.kind) {
-      case 'pickup': return { label: 'Pick up', icon: 'hand', ready: true, name: o.label };
-      case 'fiber': return { label: 'Gather', icon: 'hand', ready: true, name: 'Fiber Plant' };
-      case 'berry': return { label: 'Pick', icon: 'eat', ready: true, name: 'Berry Bush' };
+      case 'pickup': return { label: 'Raccogli', icon: 'hand', ready: true, name: o.label };
+      case 'fiber': return { label: 'Raccogli', icon: 'hand', ready: true, name: 'Pianta da fibra' };
+      case 'berry': return { label: 'Raccogli', icon: 'eat', ready: true, name: 'Cespuglio di bacche' };
       case 'palm': case 'tree': {
         const has = this.inv.count('axe') > 0;
-        return { label: has ? 'Chop' : 'Need Axe', icon: 'item:axe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
+        return { label: has ? 'Taglia' : 'Serve l’ascia', icon: 'item:axe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
       }
       case 'node': {
         const has = this.inv.count('pickaxe') > 0;
-        return { label: has ? 'Mine' : 'Need Pickaxe', icon: 'item:pickaxe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
+        return { label: has ? 'Scava' : 'Serve il piccone', icon: 'item:pickaxe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
       }
-      case 'crab': return { label: 'Catch', icon: 'hand', ready: true, name: 'Crab' };
-      case 'campfire': return this.inv.count('crab_raw') > 0 ? { label: 'Cook', icon: 'fire', ready: true, name: 'Campfire' } : { label: 'Warm up', icon: 'fire', ready: true, name: 'Campfire' };
-      case 'bed': return { label: this.sky.isNight() || this.sky.hours > 18.5 ? 'Sleep' : 'Rest', icon: 'moon', ready: true, name: 'Leaf Bed' };
-      case 'water': return t.fresh ? { label: 'Drink', icon: 'drink', ready: true, name: 'Fresh Water' } : { label: 'Drink', icon: 'drink', ready: true, name: 'Sea Water' };
+      case 'crab': return { label: 'Cattura', icon: 'hand', ready: true, name: 'Granchio' };
+      case 'campfire': return this.inv.count('crab_raw') > 0 ? { label: 'Cucina', icon: 'fire', ready: true, name: 'Falò' } : { label: 'Scaldati', icon: 'fire', ready: true, name: 'Falò' };
+      case 'bed': return { label: this.sky.isNight() || this.sky.hours > 18.5 ? 'Dormi' : 'Riposa', icon: 'moon', ready: true, name: 'Giaciglio di foglie' };
+      case 'water': return t.fresh ? { label: 'Bevi', icon: 'drink', ready: true, name: 'Acqua dolce' } : { label: 'Bevi', icon: 'drink', ready: true, name: 'Acqua di mare' };
     }
-    return { label: 'Use', icon: 'hand', ready: false };
+    return { label: 'Usa', icon: 'hand', ready: false };
   }
 
   faceTarget(o) {
@@ -396,7 +397,7 @@ export class Game {
         break;
       }
       case 'palm': case 'tree': {
-        if (!this.ensureTool('axe')) { this.ui.toast('axe', 'You need a Stone Axe', true); this.audio.error(); this.actionCooldown = 1; return; }
+        if (!this.ensureTool('axe')) { this.ui.toast('axe', 'Ti serve un’ascia di pietra', true); this.audio.error(); this.actionCooldown = 1; return; }
         this.faceTarget(o);
         this.audio.swing();
         c.play('chop', 0.62, () => {
@@ -436,7 +437,7 @@ export class Game {
         break;
       }
       case 'node': {
-        if (!this.ensureTool('pickaxe')) { this.ui.toast('pickaxe', 'You need a Stone Pickaxe', true); this.audio.error(); this.actionCooldown = 1; return; }
+        if (!this.ensureTool('pickaxe')) { this.ui.toast('pickaxe', 'Ti serve un piccone di pietra', true); this.audio.error(); this.actionCooldown = 1; return; }
         this.faceTarget(o);
         this.audio.swing();
         c.play('mine', 0.65, () => {
@@ -464,7 +465,7 @@ export class Game {
         this.faceTarget(o);
         c.play(this.heldTool() && this.heldTool() !== 'torch' ? 'attack' : 'gather', 0.5, () => {
           if (!o.alive) return;
-          if (Math.hypot(o.x - P.pos.x, o.z - P.pos.z) > 2.2) { this.ui.toast(null, 'Missed! Crabs are quick…'); return; }
+          if (Math.hypot(o.x - P.pos.x, o.z - P.pos.z) > 2.2) { this.ui.toast(null, 'Mancato! I granchi sono veloci…'); return; }
           o.hp -= this.heldTool() ? 2 : 1;
           this.fx.burst('splash', new THREE.Vector3(o.x, o.y + 0.2, o.z), 6);
           this.audio.hit(1500, 0.08, 0.3, 2);
@@ -474,14 +475,14 @@ export class Game {
         break;
       }
       case 'water': {
-        if (!t.fresh) { this.ui.toast(null, 'Too salty! Find fresh water inland.', true); this.audio.error(); this.actionCooldown = 1.2; return; }
+        if (!t.fresh) { this.ui.toast(null, 'Troppo salata! Cerca acqua dolce nell’entroterra.', true); this.audio.error(); this.actionCooldown = 1.2; return; }
         this.faceTarget(o);
         c.play('drink', 1.1, () => {
           this.stats.water = clamp(this.stats.water + 35, 0, 100);
           this.progress.drank++;
           this.audio.drink();
           this.fx.burst('splash', P.pos.clone().addScaledVector(P.forward, 0.8).add(new THREE.Vector3(0, 0.2, 0)), 10);
-          this.ui.toast(null, '💧 +35 water');
+          this.ui.toast(null, '💧 +35 acqua');
           this.checkQuest();
         }, 0.5);
         this.actionCooldown = 1.2;
@@ -494,14 +495,14 @@ export class Game {
             if (this.inv.remove('crab_raw', 1)) {
               this.inv.add('crab_cooked', 1);
               this.progress.crafted.crab_cooked = (this.progress.crafted.crab_cooked || 0) + 1;
-              this.ui.toast('crab_cooked', 'Cooked a Grilled Crab!');
+              this.ui.toast('crab_cooked', 'Granchio alla brace pronto!');
               this.audio.craft();
               this.checkQuest();
             }
           }, 0.8);
           this.actionCooldown = 1.5;
         } else {
-          this.ui.toast(null, '🔥 Warm and cozy. Catch crabs on the beach to cook them.');
+          this.ui.toast(null, '🔥 Che tepore. Cattura granchi sulla spiaggia per cucinarli.');
           this.actionCooldown = 2;
         }
         break;
@@ -519,7 +520,7 @@ export class Game {
     this.respawn = { x: bed.x, z: bed.z };
     this.progress.slept++;
     if (!night) {
-      this.ui.center('Rested', 'Respawn point set. Sleep here at night to skip to morning.', 2800);
+      this.ui.center('Riposato', 'Punto di rinascita impostato. Dormi qui di notte per arrivare al mattino.', 2800);
       this.stats.health = clamp(this.stats.health + 10, 0, 100);
       this.audio.quest();
       this.checkQuest();
@@ -534,7 +535,7 @@ export class Game {
   skipNight(fromPartner) {
     if (this._skipping) return;
     this._skipping = true;
-    if (fromPartner) this.ui.center('Your partner went to sleep…', '', 1500);
+    if (fromPartner) this.ui.center('Il tuo compagno si è messo a dormire…', '', 1500);
     const fade = document.getElementById('fade');
     fade.classList.add('on');
     this.player.frozen = true;
@@ -547,7 +548,7 @@ export class Game {
       this.stats.water = clamp(this.stats.water - 12, 0, 100);
       fade.classList.remove('on');
       this.player.frozen = false;
-      this.ui.center(`Day ${this.sky.day}`, 'A new morning on the island', 3000);
+      this.ui.center(`Giorno ${this.sky.day}`, 'Un nuovo mattino sull’isola', 3000);
       this.checkQuest();
       this.save();
     }, 1600);
@@ -562,10 +563,10 @@ export class Game {
     const cost = isItem ? { [piece]: 1 } : PIECES[piece].cost;
     if (!this.inv.has(cost)) {
       const miss = Object.entries(cost).filter(([k, n]) => this.inv.count(k) < n).map(([k, n]) => `${n - this.inv.count(k)} ${ITEMS[k].name}`).join(', ');
-      this.ui.toast(null, `Need ${miss}`, true); this.audio.error(); return;
+      this.ui.toast(null, `Mancano: ${miss}`, true); this.audio.error(); return;
     }
     if (!t.ok) {
-      const why = piece === 'foundation' ? 'Needs clear, fairly flat ground' : piece === 'roof' ? 'Roofs go on top of a foundation' : isItem ? 'Find a clear flat spot' : 'Walls attach to a foundation edge';
+      const why = piece === 'foundation' ? 'Serve un terreno libero e piano' : piece === 'roof' ? 'Il tetto va sopra una fondazione' : isItem ? 'Trova un punto libero e piano' : 'Le pareti vanno sul bordo di una fondazione';
       this.ui.toast(null, why, true); this.audio.error(); return;
     }
     this.inv.consume(cost);
@@ -591,7 +592,7 @@ export class Game {
     const s = this.building.shelterCells();
     if (s.length) {
       this.progress.shelterDone = true;
-      this.ui.center('Shelter Complete!', 'You built your first home on the island', 3500);
+      this.ui.center('Rifugio completato!', 'Hai costruito la tua prima casa sull’isola', 3500);
       this.audio.quest();
       const c = s[0];
       this.fx.sparkle(new THREE.Vector3((c.i + 0.5) * 3, this.player.pos.y + 1.5, (c.j + 0.5) * 3), 40);
@@ -613,12 +614,12 @@ export class Game {
       this.ui.setQuest(q);
       setTimeout(() => {
         this.audio.quest();
-        this.ui.center('Objective Complete', q.title, 2200);
+        this.ui.center('Obiettivo completato', q.title, 2200);
         this.fx.sparkle(this.player.pos.clone().add(new THREE.Vector3(0, 1.4, 0)), 18);
         this.questIndex++;
         this._questPending = false;
         if (this.questIndex >= QUESTS.length) {
-          setTimeout(() => this.ui.center('Home, Sweet Home', 'The island is yours to explore', 3500), 2400);
+          setTimeout(() => this.ui.center('Casa dolce casa', 'L’isola è tutta da esplorare', 3500), 2400);
         }
         this.checkQuest();
       }, 700);
@@ -634,22 +635,22 @@ export class Game {
     S.food -= dt * 0.105 * exert;
     if (S.water <= 0 || S.food <= 0) {
       S.health -= dt * (S.water <= 0 && S.food <= 0 ? 1.6 : 0.8);
-      if (!this._starveWarn || this.time - this._starveWarn > 12) { this._starveWarn = this.time; this.ui.toast(null, S.water <= 0 ? 'You are dehydrated!' : 'You are starving!', true); this.audio.hurt(); }
+      if (!this._starveWarn || this.time - this._starveWarn > 12) { this._starveWarn = this.time; this.ui.toast(null, S.water <= 0 ? 'Sei disidratato!' : 'Stai morendo di fame!', true); this.audio.hurt(); }
     } else if (S.water > 35 && S.food > 35) {
       S.health += dt * (nearFire || this.building.isSheltered(P.pos.x, P.pos.z) ? 0.6 : 0.25);
     }
     S.water = clamp(S.water, 0, 100); S.food = clamp(S.food, 0, 100); S.health = clamp(S.health, 0, 100);
     if (S.health <= 0 && !this.dead) this.die();
     if (!this._lowWarn || this.time - this._lowWarn > 40) {
-      if (S.water < 25) { this._lowWarn = this.time; this.ui.toast(null, 'Thirsty… find fresh water or coconuts.', true); }
-      else if (S.food < 25) { this._lowWarn = this.time; this.ui.toast(null, 'Hungry… berries, coconuts or crabs.', true); }
+      if (S.water < 25) { this._lowWarn = this.time; this.ui.toast(null, 'Hai sete… cerca acqua dolce o cocchi.', true); }
+      else if (S.food < 25) { this._lowWarn = this.time; this.ui.toast(null, 'Hai fame… bacche, cocchi o granchi.', true); }
     }
   }
 
   die() {
     this.dead = true;
     const fade = document.getElementById('fade');
-    this.ui.center('You passed out…', 'Rest will bring you back', 2500);
+    this.ui.center('Sei svenuto…', 'Il riposo ti rimetterà in forze', 2500);
     fade.classList.add('on');
     this.player.frozen = true;
     setTimeout(() => {
@@ -833,7 +834,7 @@ export class Game {
       const B = this.building;
       const cost = B.piece === 'campfire' || B.piece === 'bed' ? { [B.piece]: 1 } : PIECES[B.piece].cost;
       B.update(dt, P, this.rig.yaw, this.inv.has(cost));
-      this.ui.setAction({ label: 'Place', icon: 'hammer', ready: B.target && B.target.ok && this.inv.has(cost) });
+      this.ui.setAction({ label: 'Posiziona', icon: 'hammer', ready: B.target && B.target.ok && this.inv.has(cost) });
       this.ui.setTarget(null);
     } else {
       // interaction target
@@ -846,7 +847,7 @@ export class Game {
     }
 
     this.updateSurvival(dt);
-    if (!this.progress.reachedPeak && P.pos.y > 40) { this.progress.reachedPeak = true; this.ui.center('What a view!', 'You climbed high into the peaks', 2500); }
+    if (!this.progress.reachedPeak && P.pos.y > 40) { this.progress.reachedPeak = true; this.ui.center('Che vista!', 'Sei salito in alto tra i picchi', 2500); }
 
     // HUD
     this.updateWaypoint();
@@ -874,7 +875,7 @@ export class Game {
     this.audio.update(dt, { coastDist: this.terrain.coastDist(P.pos.x, P.pos.z), night: this.sky.night });
     // night warning
     const nightNow = this.sky.night > 0.5;
-    if (nightNow && !this._wasNight) this.ui.toast(null, '🌙 Night falls. Stay near a fire or sleep.');
+    if (nightNow && !this._wasNight) this.ui.toast(null, '🌙 Scende la notte. Resta vicino al fuoco o dormi.');
     this._wasNight = nightNow;
     // fireflies drifting around at night
     if (this.sky.night > 0.5 && Math.random() < dt * 6) {
@@ -987,15 +988,15 @@ export class Game {
     this.rig.target.copy(this.player.pos);
     if (this.mode === 'guest') {
       this.intro = null;
-      setTimeout(() => this.ui.center("Your partner's island", 'Explore, gather and build together', 3500), 400);
+      setTimeout(() => this.ui.center('L’isola del tuo compagno', 'Esplorate, raccogliete e costruite insieme', 3500), 400);
     } else if (!this.loaded) {
       this.rig.yaw = 0;
       this.player.char.play('wake', 3.2);
       this.player.frozen = true;
       setTimeout(() => { this.player.frozen = false; }, 2400);
-      setTimeout(() => this.ui.center('Day 1', 'You washed ashore. Gather what you can find.', 3500), 600);
+      setTimeout(() => this.ui.center('Giorno 1', 'Sei naufragato. Raccogli ciò che trovi.', 3500), 600);
     } else {
-      setTimeout(() => this.ui.center('Welcome back', `Day ${this.sky.day}`, 2500), 400);
+      setTimeout(() => this.ui.center('Bentornato', `Giorno ${this.sky.day}`, 2500), 400);
     }
   }
 }

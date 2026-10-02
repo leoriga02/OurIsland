@@ -1,6 +1,6 @@
 # Our Island
 
-A mobile-first, third-person tropical survival prototype built with Three.js. There's no build step and it needs no external assets: all models, textures and sounds are generated in code.
+A mobile-first, third-person tropical survival prototype built with Three.js. The in-game text is in Italian. There's no build step. Ground textures, rocks and understorey plants are CC0 scanned assets from Poly Haven (`assets/external/`, see its CREDITS.md). Everything else (characters, trees, buildings, sounds) is generated in code, and the game falls back to procedural versions if the assets fail to load.
 
 **Early-game loop:** wash ashore → gather sticks, stones and fiber → craft a stone axe → fell palms → make a campfire → find fresh water → build a raised wooden hut (foundation, walls, doorway, thatch roof) → craft a leaf bed and sleep through the night.
 
@@ -18,8 +18,8 @@ To play on an iPhone, open that URL from a device on the same network, or use th
 ## Co-op (2 players, 2 devices)
 
 1. Both players open the game URL. For playing apart, GitHub Pages works best; on the same Wi-Fi, a local server works too.
-2. Player 1 taps **Host Co-op** and then **Invite**, which shares a link or copies it (the 5-letter room code also works).
-3. Player 2 opens the link, or taps **Join Co-op** and types the code, then taps **Join Island**.
+2. Player 1 taps **Crea partita co-op** and then **Invita**, which shares a link or copies it (the 5-letter room code also works).
+3. Player 2 opens the link, or taps **Unisciti in co-op** and types the code, then taps **Raggiungi l’isola**.
 
 There's no server to set up. The two browsers connect directly over WebRTC; the free public PeerJS service only introduces them (with a relay fallback for strict mobile networks). The host's island is the shared world, and it's saved on the host's device. The guest keeps their own backpack and progress. Players see each other move and act. Gathering, felling trees, mining, building and sleeping through the night are shared. If the connection drops, the guest reconnects automatically.
 
@@ -38,11 +38,11 @@ If the public PeerJS service is ever down, run your own with `npx peer --port 90
 | Backpack: inventory, crafting, building | Tab / I, C |
 | Tap a hotbar slot to equip a tool, eat food or place an item | 1–8 |
 
-Progress autosaves to `localStorage`. On the title screen, **New island** resets it. Add `?low` to the URL for the low-quality mode.
+Progress autosaves to `localStorage`. On the title screen, **Nuova isola** resets it. Add `?low` to the URL for the low-quality mode.
 
 ## Code map
 
-- `src/world/`: terrain heightfield, water shader, sky and day/night cycle, vegetation and rocks (instanced, with LOD), props, waterfall
+- `src/world/`: `layout.js` is the hand-designed island map (coastline, mountains, clearings, paths and ramps, landmarks), and `terrain.js` turns it into the heightfield. Also here: water shader, sky and day/night, biome-driven vegetation, rocks and fractured cliff columns (instanced, with LOD), props (wreckage, waterfall, cave, sea arch, cairn) and distant islands
 - `src/entities/`: procedural character and animation, player controller and camera, crabs, seagulls
 - `src/game/`: items and recipes, inventory, building system, quests, and the game orchestrator (`game.js`)
 - `src/ui/`: HUD, panels and minimap. Item icons are rendered from the 3D models

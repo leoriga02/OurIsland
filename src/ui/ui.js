@@ -29,7 +29,7 @@ export class UI {
     this.craftSel = 0;
     this.buildSel = 'foundation';
     this.mm = $('minimap').getContext('2d');
-    this.mapImg = game.terrain.buildMapImage(256);
+    this.mapImg = game.terrain.buildMapImage(384);
     this.actionKey = '';
     this.hotbarKey = '';
     this._wire();
@@ -123,12 +123,12 @@ export class UI {
     const code = `<span class="cp-code">${coop.code}</span>`;
     const host = coop.role === 'host';
     const msgs = {
-      connecting: host ? `Opening room ${code}…` : `Connecting to ${code}…`,
-      waiting: `Room ${code} · waiting for partner`,
-      searching: `Looking for room ${code}…`,
-      reconnecting: 'Reconnecting…',
-      offline: 'Offline — retrying…',
-      connected: host ? 'Partner connected' : `Playing on ${code}`,
+      connecting: host ? `Apertura stanza ${code}…` : `Connessione a ${code}…`,
+      waiting: `Stanza ${code} · in attesa del compagno`,
+      searching: `Ricerca stanza ${code}…`,
+      reconnecting: 'Riconnessione…',
+      offline: 'Offline, nuovo tentativo…',
+      connected: host ? 'Compagno connesso' : `In gioco su ${code}`,
     };
     text.innerHTML = msgs[state] || state;
     pill.classList.toggle('on', state === 'connected');
@@ -140,12 +140,12 @@ export class UI {
       inv.addEventListener('pointerdown', (e) => e.stopPropagation());
       inv.addEventListener('click', async () => {
         const link = coop.net.inviteLink();
-        const text = `Join me on Our Island! Room code: ${coop.code}`;
+        const text = `Raggiungimi su Our Island! Codice stanza: ${coop.code}`;
         try {
           if (navigator.share) { await navigator.share({ title: 'Our Island', text, url: link }); return; }
         } catch { /* cancelled */ }
-        try { await navigator.clipboard.writeText(link); this.toast(null, 'Invite link copied!'); }
-        catch { this.center(`Room code ${coop.code}`, 'Your partner taps Join Co-op and enters it', 4000); }
+        try { await navigator.clipboard.writeText(link); this.toast(null, 'Link di invito copiato!'); }
+        catch { this.center(`Codice stanza ${coop.code}`, 'Il compagno tocca «Unisciti in co-op» e lo inserisce', 4000); }
       });
     }
     this.g.onCoopStatus?.(state);
@@ -156,11 +156,11 @@ export class UI {
     const r = coop?.remote;
     if (!r) { card.classList.add('hidden'); return; }
     card.classList.remove('hidden');
-    card.querySelector('.pc-name').textContent = '🤝 ' + (r.name || 'Partner');
+    card.querySelector('.pc-name').textContent = '🤝 ' + (r.name || 'Compagno');
     card.querySelector('.bar i').style.width = (r.stats ? r.stats[0] : 100) + '%';
     const P = this.g.player.pos;
     const d = Math.round(Math.hypot(r.pos.x - P.x, r.pos.z - P.z));
-    card.querySelector('.pc-state').textContent = coop.connected ? (d > 8 ? `${d} m away` : 'nearby') : 'reconnecting…';
+    card.querySelector('.pc-state').textContent = coop.connected ? (d > 8 ? `a ${d} m` : 'vicino') : 'riconnessione…';
   }
 
   attention(what) {
@@ -214,7 +214,7 @@ export class UI {
 
   setClock(hours, day) {
     const h = Math.floor(hours), m = Math.floor((hours - h) * 60 / 10) * 10;
-    $('clock').textContent = `Day ${day} · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    $('clock').textContent = `Giorno ${day} · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
   // heading: camera look direction angle (0 = north/-z, clockwise); quest: optional bearing of the objective
@@ -227,7 +227,7 @@ export class UI {
     const pxPerRad = W / 2.2;
     if (!this._compassBuilt) {
       this._compassBuilt = true;
-      const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      const names = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
       let html = '';
       for (let k = -1; k <= 1; k++) {
         for (let i = 0; i < 24; i++) {
@@ -332,28 +332,28 @@ export class UI {
     if (s) {
       const it = ITEMS[s.id];
       const btns = [];
-      if (it.food) btns.push(`<button class="pill primary" data-a="use">Eat</button>`);
-      if (it.tool) btns.push(`<button class="pill primary" data-a="use">Equip</button>`);
-      if (it.place) btns.push(`<button class="pill primary" data-a="use">Place</button>`);
-      det.innerHTML = `<b>${it.name}${s.n > 1 ? ' ×' + s.n : ''}</b>${it.desc}<div class="acts">${btns.join('')}<span style="align-self:center;font-size:11px">Tap another slot to move it.</span></div>`;
+      if (it.food) btns.push(`<button class="pill primary" data-a="use">Mangia</button>`);
+      if (it.tool) btns.push(`<button class="pill primary" data-a="use">Equipaggia</button>`);
+      if (it.place) btns.push(`<button class="pill primary" data-a="use">Posiziona</button>`);
+      det.innerHTML = `<b>${it.name}${s.n > 1 ? ' ×' + s.n : ''}</b>${it.desc}<div class="acts">${btns.join('')}<span style="align-self:center;font-size:11px">Tocca un altro spazio per spostarlo.</span></div>`;
       det.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
         const idx = this.selSlot;
         this.closePanel();
         this.g.useSlot(idx);
       }));
     } else {
-      det.innerHTML = `<b>Backpack</b>Slots 1–${HOTBAR} are your hotbar. Tap an item for details, then tap another slot to move it.`;
+      det.innerHTML = `<b>Zaino</b>Gli spazi 1–${HOTBAR} sono la barra rapida. Tocca un oggetto per i dettagli, poi un altro spazio per spostarlo.`;
     }
   }
 
   _renderSettings() {
     const s = this.g.settings;
-    const label = { sfx: s.sfx ? 'On' : 'Off', music: s.music ? 'On' : 'Off', quality: s.quality === 'high' ? 'High' : 'Low', follow: s.follow ? 'On' : 'Off' };
+    const label = { sfx: s.sfx ? 'Sì' : 'No', music: s.music ? 'Sì' : 'No', quality: s.quality === 'high' ? 'Alta' : 'Bassa', follow: s.follow ? 'Sì' : 'No' };
     document.querySelectorAll('[data-set]').forEach((b) => {
       const k = b.dataset.set;
       if (label[k]) b.textContent = label[k];
       b.onclick = () => {
-        if (k === 'reset') { if (confirm('Start over on a new island? Your progress will be lost.')) { this.g.clearSave(); this.g.noSave = true; location.reload(); } return; }
+        if (k === 'reset') { if (confirm('Ricominciare su una nuova isola? I progressi andranno persi.')) { this.g.clearSave(); this.g.noSave = true; location.reload(); } return; }
         this.g.toggleSetting(k);
         this._renderSettings();
       };
@@ -369,7 +369,7 @@ export class UI {
   }
 
   _renderCraft() {
-    $('craft-box').querySelector('h2').textContent = 'Crafting';
+    $('craft-box').querySelector('h2').textContent = 'Crea';
     const list = $('craft-list');
     list.innerHTML = '';
     RECIPES.forEach((r, i) => {
@@ -386,12 +386,12 @@ export class UI {
     const det = $('craft-detail');
     det.innerHTML = `<b style="color:#f5ecd6;font-size:16px">${it.name}</b><span style="font-size:12px">${it.desc}</span>
       <img class="big" src="${this.icons.item(r.out)}">${this._costHtml(r.cost)}
-      <button class="craft-btn" ${can ? '' : 'disabled'}>CRAFT</button>`;
+      <button class="craft-btn" ${can ? '' : 'disabled'}>CREA</button>`;
     det.querySelector('.craft-btn').addEventListener('click', () => { this.g.craft(r); this.refreshPanel(); });
   }
 
   _renderBuild() {
-    $('craft-box').querySelector('h2').textContent = 'Building';
+    $('craft-box').querySelector('h2').textContent = 'Costruzioni';
     const list = $('craft-list');
     list.innerHTML = '';
     for (const [id, p] of Object.entries(PIECES)) {
@@ -406,7 +406,7 @@ export class UI {
     const det = $('craft-detail');
     det.innerHTML = `<b style="color:#f5ecd6;font-size:16px">${p.name}</b><span style="font-size:12px">${p.desc}</span>
       <img class="big" src="${this.g.pieceIcon(this.buildSel)}">${this._costHtml(p.cost)}
-      <button class="craft-btn">BUILD</button>`;
+      <button class="craft-btn">COSTRUISCI</button>`;
     det.querySelector('.craft-btn').addEventListener('click', () => { this.closePanel(); this.g.toggleBuild(true, this.buildSel); });
   }
 
@@ -414,7 +414,7 @@ export class UI {
   showBuildBar(on, placing = null) {
     $('build-bar').classList.toggle('hidden', !on);
     $('build-pieces').classList.toggle('hidden', !!placing);
-    $('bb-rotate').classList.toggle('hidden', !!placing && placing !== 'Leaf Bed');
+    $('bb-rotate').classList.toggle('hidden', !!placing && placing !== ITEMS.bed.name);
     this.hotbar.classList.toggle('hidden', on);
     $('btn-build').classList.toggle('on', on);
     if (on) this.renderBuildBar();
@@ -430,7 +430,7 @@ export class UI {
       const d = document.createElement('div');
       const can = this.g.inv.has(p.cost);
       d.className = 'bpiece' + (id === cur ? ' sel' : '') + (can ? '' : ' no');
-      const cost = Object.entries(p.cost).map(([k, n]) => `${n} ${ITEMS[k].name.split(' ').pop()}`).join(' · ');
+      const cost = Object.entries(p.cost).map(([k, n]) => `${n} ${ITEMS[k].short || ITEMS[k].name}`).join(' · ');
       d.innerHTML = `<img src="${this.g.pieceIcon(id)}"><span>${cost}</span>`;
       d.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.g.building.setPiece(id); this.bbKey = ''; this.renderBuildBar(); });
       wrap.appendChild(d);

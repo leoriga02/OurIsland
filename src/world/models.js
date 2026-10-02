@@ -1,6 +1,6 @@
 // Procedural geometry builders for vegetation & rocks.
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry32, smoothstep, clamp } from '../util/noise.js';
 
 // ---------- helpers ----------
@@ -385,56 +385,102 @@ export function boulderGeometry(seed, { detail = 16, rough = 0.28, flat = 0.35, 
   return g;
 }
 
-// Tall limestone karst pillar with vertical fluting.
-export function spireGeometry(seed, H = 30, R = 7, rough = 1, { top = true, ledges = 4 } = {}) {
+// Tall fractured limestone block for cliff faces: vertical fluting, sheared facets, flat-shaded, mossy tops.
+export function cliffRockGeometry(seed, { detail = 18, tint = [0.62, 0.6, 0.55] } = {}) {
   const rnd = mulberry32(seed);
-  let g = new THREE.CylinderGeometry(R * 0.55, R, H, 28, 22, false);
+  let g = new THREE.SphereGeometry(1, detail, Math.round(detail * 0.9));
   g.deleteAttribute('uv'); g.deleteAttribute('normal');
   g = mergeVertices(g);
   const p = g.attributes.position;
-  const o = rnd() * 50;
-  const lean = (rnd() - 0.5) * 0.25;
-  for (let i = 0; i < p.count; i++) {
-    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const t = (y + H / 2) / H;
-    const a = Math.atan2(z, x);
-    const rr = Math.hypot(x, z);
-    let k = 1 + 0.28 * rough * noise3(Math.cos(a) * 1.6 + o, t * 2.5, Math.sin(a) * 1.6)
-      + 0.1 * rough * noise3(Math.cos(a) * 6 + o, t * 0.6, Math.sin(a) * 6)
-      + 0.08 * rough * noise3(Math.cos(a) * 3, y * 0.35 + o, Math.sin(a) * 3)
-      + 0.06 * Math.max(0, Math.sin(y * 0.9 + o)) * rough;
-    // bulges & ledges
-    k *= 1 + 0.15 * Math.sin(t * 9 + o) * (1 - t);
-    if (t > 0.97) k *= 0.6; // dome top
-    x = Math.cos(a) * rr * k + lean * t * t * H;
-    z = Math.sin(a) * rr * k;
-    if (t > 0.97) y += R * 0.25 * noise3(x * 0.3, o, z * 0.3);
-    p.setXYZ(i, x, y + H / 2, z);
+  const o = rnd() * 100;
+  const planes = [];
+  for (let k = 0; k < 7; k++) { // mostly vertical fracture planes, one or two sloping tops
+    const top = k < 2;
+    const a = rnd() * Math.PI * 2;
+    const n = top ? new THREE.Vector3(Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5).normalize() : new THREE.Vector3(Math.cos(a), (rnd() - 0.5) * 0.25, Math.sin(a)).normalize();
+    planes.push({ n, d: top ? 0.55 + rnd() * 0.3 : 0.55 + rnd() * 0.3 });
   }
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const ang = Math.atan2(z, x);
+    // vertical flutes: noise stretched along y
+    const d = 1 + 0.18 * fbm3(Math.cos(ang) * 2.2 + o, y * 0.5, Math.sin(ang) * 2.2 + o, 3) + 0.1 * noise3(Math.cos(ang) * 7 + o, y * 1.2, Math.sin(ang) * 7);
+    v.set(x * d, y, z * d);
+    for (const pl of planes) { const t = v.dot(pl.n) - pl.d; if (t > 0) v.addScaledVector(pl.n, -t * 0.92); }
+    // ledges: slight steps
+    v.x *= 1 + 0.05 * Math.sign(Math.sin(y * 5 + o)); v.z *= 1 + 0.05 * Math.sign(Math.sin(y * 5 + o));
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g = toCreasedNormals(g, 0.5); // crisp fracture edges, smooth flutes
+  const P = g.attributes.position, N = g.attributes.normal;
+  const col = new Float32Array(P.count * 3);
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    const streak = noise3(x * 5 + o, y * 0.7, z * 5);
+    let s = 0.9 + 0.22 * noise3(x * 2 + o, y * 2, z * 2) - Math.max(0, streak) * 0.35;
+    let r = tint[0] * s, gg = tint[1] * s, b = tint[2] * s;
+    const m = smoothstep(0.5, 0.85, N.getY(i) + noise3(x * 3, y * 3, z * 3 + o) * 0.3);
+    r += (0.3 - r) * m * 0.5; gg += (0.36 - gg) * m * 0.5; b += (0.2 - b) * m * 0.5;
+    const ao = 0.5 + 0.5 * smoothstep(-1, 0.3, y);
+    col[i * 3] = r * ao; col[i * 3 + 1] = gg * ao; col[i * 3 + 2] = b * ao;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(P.count * 2), 2));
+  return g;
+}
+
+// Leafy tuft geometry around a point (for greenery on top of landmark rocks).
+export function leafClump(seed, center, radii, count, size) {
+  const b = newBuf();
+  leafCards(b, center, radii, count, size, mulberry32(seed), [0.9, 1, 0.85]);
+  return fromBuf(b);
+}
+
+// Natural limestone sea arch: a thick, lumpy rock tube over a curved path (local x = span, y = up).
+export function archGeometry(seed, span = 48, height = 38, thick = 6) {
+  const pts = [
+    new THREE.Vector3(-span / 2, -12, 0), new THREE.Vector3(-span / 2 + 1, 8, 0), new THREE.Vector3(-span / 2 + 3, height * 0.72, 0),
+    new THREE.Vector3(-span * 0.22, height * 0.97, 0), new THREE.Vector3(span * 0.2, height, 0), new THREE.Vector3(span / 2 - 3, height * 0.74, 0),
+    new THREE.Vector3(span / 2 - 1, 8, 0), new THREE.Vector3(span / 2, -12, 0),
+  ];
+  const curve = new THREE.CatmullRomCurve3(pts);
+  let g = new THREE.TubeGeometry(curve, 48, thick, 14, false);
+  const o = seed * 3.7;
+  {
+    const p = g.attributes.position, c = new THREE.Vector3(), v = new THREE.Vector3();
+    for (let idx = 0; idx < p.count; idx++) {
+      curve.getPointAt(Math.floor(idx / 15) / 48, c);
+      v.set(p.getX(idx), p.getY(idx), p.getZ(idx));
+      // thicker legs, lumpy weathering
+      const legs = 1 + 0.7 * smoothstep(16, -8, c.y) + 0.25 * smoothstep(height * 0.8, height, c.y);
+      const k = legs * (1 + 0.24 * fbm3(v.x * 0.08 + o, v.y * 0.08, v.z * 0.08, 3));
+      v.sub(c).multiplyScalar(k).add(c);
+      p.setXYZ(idx, v.x, v.y, v.z);
+    }
+  }
+  g.deleteAttribute('uv'); g.deleteAttribute('normal');
+  g = mergeVertices(g);
+  const p = g.attributes.position;
   g.computeVertexNormals();
   const n = g.attributes.normal;
   const col = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const a = Math.atan2(z, x);
-    const streak = noise3(Math.cos(a) * 8 + o, y * 0.04, Math.sin(a) * 8);
-    let v = 0.78 + 0.32 * streak + 0.12 * noise3(x * 0.5, y * 0.5, z * 0.5);
-    let r = 0.44 * v, gg = 0.415 * v, b = 0.38 * v;
-    const m = smoothstep(0.4, 0.8, n.getY(i) + 0.2 * noise3(x * 0.4, y * 0.4 + o, z * 0.4));
+    const v = 0.8 + 0.3 * noise3(x * 0.3, y * 0.05 + o, z * 0.3) + 0.1 * noise3(x, y, z);
+    let r = 0.5 * v, gg = 0.47 * v, b = 0.42 * v;
+    const m = smoothstep(0.45, 0.8, n.getY(i)) * smoothstep(4, 14, y);
     r += (0.28 - r) * m; gg += (0.44 - gg) * m; b += (0.16 - b) * m;
-    const ao = 0.6 + 0.4 * smoothstep(0, H * 0.3, y);
-    col[i * 3] = r * ao; col[i * 3 + 1] = gg * ao; col[i * 3 + 2] = b * ao;
+    const wet = smoothstep(2, -2, y);
+    r *= 1 - wet * 0.45; gg *= 1 - wet * 0.4; b *= 1 - wet * 0.3;
+    col[i * 3] = r; col[i * 3 + 1] = gg; col[i * 3 + 2] = b;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(p.count * 2), 2));
-  // greenery on top and ledges
-  const cb = newBuf();
-  const topR = R * 0.55 * 0.8;
-  if (top) leafCards(cb, new THREE.Vector3(lean * H, H + 0.5, 0), new THREE.Vector3(topR * 1.2, 1.6, topR * 1.2), 40, 2.6, rnd, [0.9, 1, 0.85]);
-  for (let k = 0; k < ledges; k++) {
-    const t = 0.35 + rnd() * 0.5, a = rnd() * Math.PI * 2;
-    const rr = R * (1 - t * 0.45) * 1.05;
-    leafCards(cb, new THREE.Vector3(Math.cos(a) * rr + lean * t * t * H, t * H, Math.sin(a) * rr), new THREE.Vector3(2.2, 1.1, 2.2), 14, 1.8, rnd, [0.9, 1, 0.85]);
+  const green = [];
+  for (let k = 0; k < 5; k++) {
+    const pt = curve.getPoint(0.3 + k * 0.1);
+    green.push(leafClump(seed + k, new THREE.Vector3(pt.x, pt.y + thick * 0.7, 0), new THREE.Vector3(5, 1.6, 4), 16, 2.4));
   }
-  return { rock: g, green: fromBuf(cb) };
+  return { rock: g, green: merge(green) };
 }

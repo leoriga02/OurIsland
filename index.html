@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
@@ -28,7 +28,7 @@
     </div>
     <div id="partner-card" class="hidden"><div class="pc-name"></div><div class="bar"><i></i></div><div class="pc-state"></div></div>
     <div id="quest"></div>
-    <div id="coop-pill" class="hidden"><span class="cp-dot"></span><span class="cp-text"></span><button class="cp-invite pill small">Invite</button></div>
+    <div id="coop-pill" class="hidden"><span class="cp-dot"></span><span class="cp-text"></span><button class="cp-invite pill small">Invita</button></div>
     <div id="compass"><div id="compass-strip"></div><div class="c-mark"></div></div>
     <div id="minimap-wrap"><canvas id="minimap" width="168" height="168"></canvas><div id="clock"></div></div>
     <div id="toasts"></div>
@@ -39,19 +39,19 @@
     <div id="hotbar"></div>
 
     <div id="left-btns">
-      <button id="btn-bag" class="sqbtn" aria-label="Backpack"><span class="glyph">🎒</span></button>
-      <button id="btn-build" class="sqbtn" aria-label="Build"><span class="glyph">🔨</span></button>
+      <button id="btn-bag" class="sqbtn" aria-label="Zaino"><span class="glyph">🎒</span></button>
+      <button id="btn-build" class="sqbtn" aria-label="Costruisci"><span class="glyph">🔨</span></button>
     </div>
     <div id="btn-cluster">
-      <button id="btn-sprint" class="rbtn" aria-label="Sprint"><span class="glyph">»</span></button>
-      <button id="btn-jump" class="rbtn" aria-label="Jump"><span class="glyph">⤒</span></button>
-      <button id="btn-action" class="rbtn big" aria-label="Action"><span class="glyph" id="action-glyph">✋</span><span id="action-label">Use</span></button>
+      <button id="btn-sprint" class="rbtn" aria-label="Corri"><span class="glyph">»</span></button>
+      <button id="btn-jump" class="rbtn" aria-label="Salta"><span class="glyph">⤒</span></button>
+      <button id="btn-action" class="rbtn big" aria-label="Azione"><span class="glyph" id="action-glyph">✋</span><span id="action-label">Usa</span></button>
     </div>
     <div id="build-bar" class="hidden">
       <div id="build-pieces"></div>
       <div id="build-ctrls">
-        <button id="bb-rotate" class="pill">⟳ Rotate</button>
-        <button id="bb-cancel" class="pill">✕ Done</button>
+        <button id="bb-rotate" class="pill">⟳ Ruota</button>
+        <button id="bb-cancel" class="pill">✕ Fine</button>
       </div>
     </div>
     <div id="joy"><div id="joy-knob"></div></div>
@@ -60,28 +60,28 @@
   <div id="panel" class="hidden">
     <div id="panel-inner">
       <div id="tabs">
-        <button data-tab="inv" class="tab active" aria-label="Inventory">🎒</button>
-        <button data-tab="craft" class="tab" aria-label="Crafting">⚒</button>
-        <button data-tab="build" class="tab" aria-label="Building">🏠</button>
-        <button data-tab="settings" class="tab" aria-label="Settings">⚙</button>
-        <button id="panel-close" class="tab close" aria-label="Close">✕</button>
+        <button data-tab="inv" class="tab active" aria-label="Inventario">🎒</button>
+        <button data-tab="craft" class="tab" aria-label="Crea">⚒</button>
+        <button data-tab="build" class="tab" aria-label="Costruzioni">🏠</button>
+        <button data-tab="settings" class="tab" aria-label="Impostazioni">⚙</button>
+        <button id="panel-close" class="tab close" aria-label="Chiudi">✕</button>
       </div>
       <div id="inv-box" class="box">
-        <h2>Inventory</h2>
+        <h2>Inventario</h2>
         <div id="inv-grid" class="grid"></div>
         <div id="inv-detail" class="detail"></div>
       </div>
       <div id="settings-box" class="box hidden">
-        <h2>Settings</h2>
-        <div class="set-row"><span>Sound effects</span><button class="pill" data-set="sfx"></button></div>
-        <div class="set-row"><span>Music</span><button class="pill" data-set="music"></button></div>
-        <div class="set-row"><span>Graphics</span><button class="pill" data-set="quality"></button></div>
-        <div class="set-row"><span>Camera auto-follow</span><button class="pill" data-set="follow"></button></div>
-        <div class="set-row"><span>Start a new island</span><button class="pill danger" data-set="reset">Reset</button></div>
-        <div class="set-note">Progress saves automatically.</div>
+        <h2>Impostazioni</h2>
+        <div class="set-row"><span>Effetti sonori</span><button class="pill" data-set="sfx"></button></div>
+        <div class="set-row"><span>Musica</span><button class="pill" data-set="music"></button></div>
+        <div class="set-row"><span>Grafica</span><button class="pill" data-set="quality"></button></div>
+        <div class="set-row"><span>Visuale automatica</span><button class="pill" data-set="follow"></button></div>
+        <div class="set-row"><span>Ricomincia su una nuova isola</span><button class="pill danger" data-set="reset">Azzera</button></div>
+        <div class="set-note">I progressi vengono salvati automaticamente.</div>
       </div>
       <div id="craft-box" class="box">
-        <h2>Crafting</h2>
+        <h2>Crea</h2>
         <div class="craft-wrap">
           <div id="craft-list" class="list"></div>
           <div id="craft-detail" class="detail"></div>
@@ -93,39 +93,39 @@
   <div id="title">
     <div class="title-inner">
       <div class="logo"><span>OUR</span><span>ISLAND</span></div>
-      <div class="tag">Stranded. Survive. Build a home — together.</div>
+      <div class="tag">Naufraghi. Sopravvivi. Costruisci una casa, insieme.</div>
       <div id="char-pick">
-        <button class="char-card" data-char="m"><img alt=""><span>Castaway</span></button>
-        <button class="char-card" data-char="f"><img alt=""><span>Explorer</span></button>
+        <button class="char-card" data-char="m"><img alt=""><span>Naufrago</span></button>
+        <button class="char-card" data-char="f"><img alt=""><span>Esploratrice</span></button>
       </div>
       <div id="menu-main" class="menu">
-        <button id="btn-start" class="pill primary big">Play Solo</button>
+        <button id="btn-start" class="pill primary big">Gioca da solo</button>
         <div class="menu-row">
-          <button id="btn-host" class="pill coop">Host Co-op</button>
-          <button id="btn-join" class="pill coop">Join Co-op</button>
+          <button id="btn-host" class="pill coop">Crea partita co-op</button>
+          <button id="btn-join" class="pill coop">Unisciti in co-op</button>
         </div>
-        <button id="btn-new" class="pill small hidden">New island</button>
+        <button id="btn-new" class="pill small hidden">Nuova isola</button>
       </div>
       <div id="menu-join" class="menu hidden">
-        <div class="menu-label">Enter your partner's room code</div>
-        <input id="join-code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" />
+        <div class="menu-label">Inserisci il codice stanza del compagno</div>
+        <input id="join-code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODICE" />
         <div class="menu-row">
-          <button id="btn-join-go" class="pill primary">Join</button>
-          <button id="btn-join-back" class="pill">Back</button>
+          <button id="btn-join-go" class="pill primary">Entra</button>
+          <button id="btn-join-back" class="pill">Indietro</button>
         </div>
       </div>
       <div id="menu-guest" class="menu hidden">
-        <div class="menu-label" id="guest-label">Joining room</div>
-        <button id="btn-guest-go" class="pill primary big">Join Island</button>
+        <div class="menu-label" id="guest-label">Accesso alla stanza</div>
+        <button id="btn-guest-go" class="pill primary big">Raggiungi l’isola</button>
         <div id="guest-status" class="menu-status"></div>
-        <button id="btn-guest-solo" class="pill small">Play solo instead</button>
+        <button id="btn-guest-solo" class="pill small">Gioca da solo</button>
       </div>
       <div class="hint" id="title-hint"></div>
     </div>
   </div>
   <div id="fade"></div>
-  <div id="rotate-hint">↻ Rotate your phone to landscape</div>
-  <div id="loading"><div class="spin"></div><div>Washing ashore…</div></div>
+  <div id="rotate-hint">↻ Ruota il telefono in orizzontale</div>
+  <div id="loading"><div class="spin"></div><div>Approdo sull’isola…</div></div>
 
   <script type="module" src="src/main.js"></script>
 </body>
