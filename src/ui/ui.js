@@ -353,6 +353,7 @@ export class UI {
       const k = b.dataset.set;
       if (label[k]) b.textContent = label[k];
       b.onclick = () => {
+        if (k === 'save') { this.g.manualSave(); return; }
         if (k === 'reset') { if (confirm('Ricominciare su una nuova isola? I progressi andranno persi.')) { this.g.clearSave(); this.g.noSave = true; location.reload(); } return; }
         this.g.toggleSetting(k);
         this._renderSettings();

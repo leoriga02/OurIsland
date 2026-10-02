@@ -1,8 +1,8 @@
-// Grid-snapped building (foundations, walls, doorways, windows, roofs) + free placeables (campfire, bed).
+// Grid-snapped building (foundations, walls, doorways, windows, roofs) + free placeables (FREE_PLACE: campfire, bed, farm plot…).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { materials } from '../world/materials.js';
-import { PIECES, campfireGeo, bedGeo, itemMaterial } from './items.js';
+import { PIECES, FREE_PLACE, campfireGeo, bedGeo, farmPlotGeo, itemMaterial } from './items.js';
 import { mulberry32 } from '../util/noise.js';
 
 export const G = 3;          // grid cell size
@@ -139,6 +139,7 @@ export function pieceModel(type) {
   else if (type === 'roof') m = roofModel();
   else if (type === 'campfire') m = [{ geo: campfireGeo(1), mat: itemMaterial }];
   else if (type === 'bed') m = [{ geo: bedGeo(), mat: itemMaterial }];
+  else if (type === 'farm_plot') m = [{ geo: farmPlotGeo(1), mat: itemMaterial }];
   else m = wallModel(type);
   return (modelCache[type] = m);
 }
@@ -214,14 +215,14 @@ export class Building {
     const T = this.world.terrain;
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw);
     const p = this.piece;
-    if (p === 'campfire' || p === 'bed') {
-      const d = p === 'bed' ? 2.2 : 1.8;
+    if (FREE_PLACE[p]) {
+      const d = FREE_PLACE[p].d, fr = FREE_PLACE[p].r;
       const x = player.pos.x + fx * d, z = player.pos.z + fz * d;
       const y = this.world.groundHeight(x, z, player.pos.y + 0.5);
       const rot = Math.atan2(fx, fz) + (this.rot * Math.PI) / 2;
       let ok = y > 0.3 && T.slopeAt(x, z) < 0.45 && !T.isInPond(x, z, 0.5);
       for (const c of this.world.nature.colliders.query(x, z, 6)) if (c.active !== false && Math.hypot(c.x - x, c.z - z) < c.r + 0.7) ok = false;
-      for (const pl of this.placeables) if (Math.hypot(pl.x - x, pl.z - z) < 1.4) ok = false;
+      for (const pl of this.placeables) if (Math.hypot(pl.x - x, pl.z - z) < fr + (FREE_PLACE[pl.type]?.r ?? 0.7)) ok = false;
       return { kind: 'free', x, y, z, rot, ok };
     }
     const ax = player.pos.x + fx * (p === 'foundation' ? 3.2 : 2.2);
@@ -292,7 +293,7 @@ export class Building {
   exists(type, t) {
     if (type === 'foundation') return !!this.cells.get(this.key(t.i, t.j))?.foundation;
     if (type === 'roof') return !!this.cells.get(this.key(t.i, t.j))?.roof;
-    if (type === 'campfire' || type === 'bed') return this.placeables.some((p) => Math.hypot(p.x - t.x, p.z - t.z) < 0.5);
+    if (FREE_PLACE[type]) return this.placeables.some((p) => Math.hypot(p.x - t.x, p.z - t.z) < 0.5);
     return this.edges.has(t.i + ',' + t.j + ',' + t.d);
   }
 
@@ -325,11 +326,12 @@ export class Building {
       obj.position.set((t.i + 0.5) * G, cell.level + WALL_H, (t.j + 0.5) * G);
       obj.rotation.y = t.rot ? Math.PI / 2 : 0;
       cell.roofObj = obj;
-    } else if (type === 'campfire' || type === 'bed') {
+    } else if (FREE_PLACE[type]) {
       obj = pieceObject(type);
       obj.position.set(t.x, t.y, t.z);
       obj.rotation.y = t.rot;
       const pl = { type, x: t.x, y: t.y, z: t.z, rot: t.rot, obj };
+      if (type === 'farm_plot') pl.crop = t.crop ? { ...t.crop } : null;
       if (type === 'campfire') {
         pl.fire = this.fx.addFire(new THREE.Vector3(t.x, t.y + 0.1, t.z), 1);
         pl.collider = { x: t.x, z: t.z, r: 0.55, h: t.y + 0.5 };
@@ -409,7 +411,7 @@ export class Building {
     const cells = [];
     for (const [k, c] of this.cells) { const [i, j] = k.split(',').map(Number); cells.push({ i, j, level: c.level, roof: !!c.roof, roofRot: c.roofRot || 0 }); }
     const edges = [...this.edges.values()].map((e) => ({ i: e.i, j: e.j, d: e.d, type: e.type, level: e.level }));
-    const placeables = this.placeables.map((p) => ({ type: p.type, x: p.x, y: p.y, z: p.z, rot: p.rot }));
+    const placeables = this.placeables.map((p) => ({ type: p.type, x: p.x, y: p.y, z: p.z, rot: p.rot, ...(p.crop !== undefined ? { crop: p.crop } : {}) }));
     return { cells, edges, placeables };
   }
 

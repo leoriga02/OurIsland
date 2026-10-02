@@ -5,7 +5,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 const BASE = './assets/external/';
-export const ASSETS = { ok: false, models: {}, tex: {} };
+export const ASSETS = { ok: false, models: {}, tex: {}, animals: {} };
+
+// Optional models the game can use as soon as the files exist (missing files are skipped silently).
+const OPTIONAL_ANIMALS = { boar: 'animals/boar.glb', chicken: 'animals/chicken.glb' };
 
 // quantized/meshopt attributes -> plain float32 so geometry can be transformed and merged
 function dequantize(g) {
@@ -80,6 +83,7 @@ export async function loadAssets(onProgress) {
       for (const v of ASSETS.models[k]) v.mat = m;
     }
     for (const k of ['boulder', 'boulder_lod', 'coast_rocks', 'coast_rocks_lod']) for (const v of ASSETS.models[k]) { v.mat.roughness = 1; v.mat.metalness = 0; }
+    await Promise.all(Object.entries(OPTIONAL_ANIMALS).map(([k, f]) => gl.loadAsync(BASE + f).then((r) => { ASSETS.animals[k] = r; }).catch(() => {})));
   } catch (e) {
     console.warn('assets failed, using procedural fallback', e);
     ASSETS.ok = false;

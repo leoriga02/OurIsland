@@ -4,6 +4,12 @@ A mobile-first, third-person tropical survival prototype built with Three.js. Th
 
 **Early-game loop:** wash ashore → gather sticks, stones and fiber → craft a stone axe → fell palms → make a campfire → find fresh water → build a raised wooden hut (foundation, walls, doorway, thatch roof) → craft a leaf bed and sleep through the night.
 
+**Survival systems:**
+- **Farming:** wild fiber plants drop sprouts. Plant them in a crafted farm plot (Orto); they grow on played time and harvest into fiber plus new sprouts.
+- **Wildlife and combat:** boars and chickens appear once their models are added (see `assets/external/animals/`). Boars chase and attack within a limited range. Fight with the craftable spear (Lancia) or any tool; boars drop meat and hide, and meat can be cooked at a campfire.
+- **Renewable resources:** trees, rocks, plants and animals respawn.
+- **Data tables** (to extend content): `ITEMS`, `RECIPES`, `PIECES`, `FREE_PLACE`, `COOKING` and `WEAPON_DMG` in `src/game/items.js`, `CROPS` in `src/game/farming.js`, and `SPECIES` in `src/entities/wildlife.js`.
+
 ## Run it
 
 Serve the folder over HTTP. ES modules don't load from `file://`.
@@ -38,7 +44,7 @@ If the public PeerJS service is ever down, run your own with `npx peer --port 90
 | Backpack: inventory, crafting, building | Tab / I, C |
 | Tap a hotbar slot to equip a tool, eat food or place an item | 1–8 |
 
-Progress autosaves to `localStorage`. On the title screen, **Nuova isola** resets it. Add `?low` to the URL for the low-quality mode.
+Progress autosaves to `localStorage` every 20 seconds and whenever the tab is hidden or closed. Settings also has a **Salva partita** button. Saves carry a format version and are migrated on load. On the title screen, **Nuova isola** resets it. Add `?low` to the URL for the low-quality mode.
 
 ## Code map
 

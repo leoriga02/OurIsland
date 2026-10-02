@@ -19,7 +19,23 @@ export const ITEMS = {
   torch: { name: 'Torcia', desc: 'Illumina la notte.', stack: 1, tool: 'torch' },
   campfire: { name: 'Falò', desc: 'Calore, luce e cucina. Posizionalo a terra.', stack: 5, place: 'campfire' },
   bed: { name: 'Giaciglio di foglie', desc: 'Dormi fino al mattino. Imposta il punto di rinascita.', stack: 2, place: 'bed' },
+  spear: { name: 'Lancia', desc: 'Arma semplice. Colpisci con il tasto azione.', stack: 1, tool: 'spear', dmg: 4 },
+  fiber_sprout: { name: 'Germoglio di fibra', desc: 'Piantalo in un orto per coltivare fibra.', stack: 30 },
+  farm_plot: { name: 'Orto', desc: 'Terreno da coltivare. Posizionalo a terra.', stack: 5, place: 'farm_plot' },
+  meat_raw: { name: 'Carne cruda', desc: 'Meglio cotta sul fuoco…', stack: 20, food: 8, health: -5 },
+  meat_cooked: { name: 'Carne arrostita', desc: 'Sostanziosa. Ripristina cibo e salute.', stack: 20, food: 45, health: 15 },
+  hide: { name: 'Pelle', desc: 'Pelle grezza di cinghiale. Servirà per nuovi oggetti.', stack: 20 },
+  egg: { name: 'Uovo', desc: 'Piccolo ma nutriente. +Cibo', stack: 20, food: 10 },
 };
+
+// Damage dealt by whatever is in hand (bare hands = 1).
+export const WEAPON_DMG = { spear: 4, axe: 3, pickaxe: 3, torch: 1 };
+
+// Cooking at a campfire: raw -> cooked (data-driven so new foods only need a line here).
+export const COOKING = { crab_raw: 'crab_cooked', meat_raw: 'meat_cooked' };
+
+// Items that are placed freely on the ground (not grid-snapped): placement distance and footprint radius.
+export const FREE_PLACE = { campfire: { d: 1.8, r: 0.7 }, bed: { d: 2.2, r: 0.7 }, farm_plot: { d: 2.6, r: 1.3 } };
 
 export const RECIPES = [
   { out: 'axe', cost: { stick: 2, stone: 2, fiber: 3 }, cat: 'tools' },
@@ -28,6 +44,8 @@ export const RECIPES = [
   { out: 'rope', n: 1, cost: { fiber: 3 }, cat: 'materials' },
   { out: 'campfire', cost: { wood: 3, stone: 5, stick: 2 }, cat: 'camp' },
   { out: 'bed', cost: { leaf: 6, wood: 3, rope: 2 }, cat: 'camp' },
+  { out: 'spear', cost: { stick: 2, stone: 1, fiber: 2 }, cat: 'tools' },
+  { out: 'farm_plot', cost: { stick: 4, stone: 2, fiber: 2 }, cat: 'camp' },
 ];
 
 export const PIECES = {
@@ -309,10 +327,82 @@ export function bedGeo() {
   return merge(parts);
 }
 
+function spearGeo() {
+  const shaft = new THREE.CylinderGeometry(0.018, 0.022, 1.5, 6);
+  noisy(shaft, 0x7a5a3a, 0.25, 10);
+  const tip = new THREE.ConeGeometry(0.045, 0.2, 5);
+  tip.translate(0, 0.85, 0); noisy(tip, 0x8a8680, 0.3, 14);
+  const wrap = new THREE.CylinderGeometry(0.03, 0.03, 0.09, 6);
+  wrap.translate(0, 0.72, 0); col(wrap, 0xa89a62);
+  const g = merge([shaft, tip, wrap]);
+  g.translate(0, 0.35, 0);
+  return g;
+}
+
+function sproutGeo() {
+  const parts = [];
+  const r = mulberry32(31);
+  for (let i = 0; i < 6; i++) {
+    const b = new THREE.PlaneGeometry(0.035, 0.22, 1, 2);
+    b.translate(0, 0.11, 0); b.rotateZ((r() - 0.5) * 0.7); b.rotateY(i);
+    col(b, r() < 0.5 ? 0x7f9a46 : 0x9aa95a);
+    parts.push(b);
+  }
+  const soil = new THREE.SphereGeometry(0.07, 8, 5); soil.scale(1, 0.5, 1); col(soil, 0x5a4330);
+  parts.push(soil);
+  return merge(parts);
+}
+
+function meatGeo(cooked) {
+  const g = new THREE.SphereGeometry(0.13, 10, 8);
+  g.scale(1.3, 0.6, 0.9);
+  noisy(g, cooked ? 0x7a4222 : 0xb03a36, 0.25, 9);
+  const bone = new THREE.CylinderGeometry(0.018, 0.018, 0.16, 6);
+  bone.rotateZ(Math.PI / 2); bone.translate(0.2, 0, 0); col(bone, 0xe8dcc0);
+  return merge([g, bone]);
+}
+
+function hideGeo() {
+  const g = new THREE.CircleGeometry(0.2, 9);
+  g.rotateX(-Math.PI / 2); g.scale(1.3, 1, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setY(i, Math.sin(p.getX(i) * 9) * 0.02);
+  g.computeVertexNormals();
+  noisy(g, 0x6e4a30, 0.3, 8);
+  return g;
+}
+
+function eggGeo() {
+  const g = new THREE.SphereGeometry(0.06, 10, 8);
+  g.scale(1, 1.3, 1); col(g, 0xeadfc8);
+  return g;
+}
+
+// Farm plot: tilled soil bed framed by logs (crop is added on top by the farming system)
+export function farmPlotGeo(scale = 1) {
+  const parts = [];
+  const soil = new THREE.BoxGeometry(1.9, 0.16, 1.9, 6, 1, 6);
+  const p = soil.attributes.position;
+  for (let i = 0; i < p.count; i++) if (p.getY(i) > 0) p.setY(i, p.getY(i) + Math.sin(p.getX(i) * 9) * 0.025);
+  soil.computeVertexNormals();
+  soil.translate(0, 0.08, 0); noisy(soil, 0x4a3524, 0.3, 5);
+  parts.push(soil);
+  for (let k = 0; k < 4; k++) {
+    const l = logGeo(2.1, 0.07);
+    l.rotateY(k * Math.PI / 2); l.translate(Math.sin(k * Math.PI / 2) * 1.0, 0.08, Math.cos(k * Math.PI / 2) * 1.0);
+    parts.push(l);
+  }
+  const g = merge(parts);
+  g.scale(scale, scale, scale);
+  return g;
+}
+
 const builders = {
   wood: () => logGeo(), stick: stickGeo, stone: () => stoneGeo(), fiber: fiberGeo, leaf: leafGeo,
   rope: ropeGeo, coconut: coconutGeo, berries: berriesGeo, crab_raw: () => crabGeo(false), crab_cooked: () => crabGeo(true),
   axe: axeGeo, pickaxe: pickaxeGeo, torch: torchGeo, campfire: () => campfireGeo(0.5), bed: () => bedGeo(),
+  spear: spearGeo, fiber_sprout: sproutGeo, farm_plot: () => farmPlotGeo(0.35), meat_raw: () => meatGeo(false), meat_cooked: () => meatGeo(true),
+  hide: hideGeo, egg: eggGeo,
 };
 
 const geoCache = {};

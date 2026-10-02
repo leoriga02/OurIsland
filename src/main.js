@@ -64,6 +64,9 @@ async function boot() {
     renderer.setPixelRatio(pixelRatio); onResize();
   };
   game.applySettings();
+  // persist when the tab is hidden, closed or refreshed (mobile browsers may kill a backgrounded tab)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') game.save(); });
+  window.addEventListener('pagehide', () => game.save());
 
   const $ = (id) => document.getElementById(id);
   const startBtn = $('btn-start');
