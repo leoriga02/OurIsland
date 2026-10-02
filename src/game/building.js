@@ -1,8 +1,9 @@
-// Grid-snapped building (foundations, walls, doorways, windows, roofs) + free placeables (campfire, bed).
+// Grid-snapped building (foundations, walls, doorways, windows, roofs) + free placeables (FREE_PLACE: campfire, bed, farm plot…).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { materials } from '../world/materials.js';
-import { PIECES, campfireGeo, bedGeo, itemMaterial } from './items.js';
+import { PIECES, FREE_PLACE, STORAGE, campfireGeo, bedGeo, farmPlotGeo, chestGeo, coopGeo, collectorGeo, furnaceGeo, rackGeo, itemMaterial } from './items.js';
+import { Inventory } from './inventory.js';
 import { mulberry32 } from '../util/noise.js';
 
 export const G = 3;          // grid cell size
@@ -139,6 +140,13 @@ export function pieceModel(type) {
   else if (type === 'roof') m = roofModel();
   else if (type === 'campfire') m = [{ geo: campfireGeo(1), mat: itemMaterial }];
   else if (type === 'bed') m = [{ geo: bedGeo(), mat: itemMaterial }];
+  else if (type === 'farm_plot') m = [{ geo: farmPlotGeo(1), mat: itemMaterial }];
+  else if (type === 'chest') m = [{ geo: chestGeo(0.9, 0.6, 0.6), mat: itemMaterial }];
+  else if (type === 'big_chest') m = [{ geo: chestGeo(1.3, 0.75, 0.75), mat: itemMaterial }];
+  else if (type === 'coop') m = [{ geo: coopGeo(), mat: itemMaterial }];
+  else if (type === 'water_collector') m = [{ geo: collectorGeo(), mat: itemMaterial }];
+  else if (type === 'furnace') m = [{ geo: furnaceGeo(), mat: itemMaterial }];
+  else if (type === 'drying_rack') m = [{ geo: rackGeo(), mat: itemMaterial }];
   else m = wallModel(type);
   return (modelCache[type] = m);
 }
@@ -214,14 +222,14 @@ export class Building {
     const T = this.world.terrain;
     const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw);
     const p = this.piece;
-    if (p === 'campfire' || p === 'bed') {
-      const d = p === 'bed' ? 2.2 : 1.8;
+    if (FREE_PLACE[p]) {
+      const d = FREE_PLACE[p].d, fr = FREE_PLACE[p].r;
       const x = player.pos.x + fx * d, z = player.pos.z + fz * d;
       const y = this.world.groundHeight(x, z, player.pos.y + 0.5);
       const rot = Math.atan2(fx, fz) + (this.rot * Math.PI) / 2;
       let ok = y > 0.3 && T.slopeAt(x, z) < 0.45 && !T.isInPond(x, z, 0.5);
       for (const c of this.world.nature.colliders.query(x, z, 6)) if (c.active !== false && Math.hypot(c.x - x, c.z - z) < c.r + 0.7) ok = false;
-      for (const pl of this.placeables) if (Math.hypot(pl.x - x, pl.z - z) < 1.4) ok = false;
+      for (const pl of this.placeables) if (Math.hypot(pl.x - x, pl.z - z) < fr + (FREE_PLACE[pl.type]?.r ?? 0.7)) ok = false;
       return { kind: 'free', x, y, z, rot, ok };
     }
     const ax = player.pos.x + fx * (p === 'foundation' ? 3.2 : 2.2);
@@ -292,7 +300,7 @@ export class Building {
   exists(type, t) {
     if (type === 'foundation') return !!this.cells.get(this.key(t.i, t.j))?.foundation;
     if (type === 'roof') return !!this.cells.get(this.key(t.i, t.j))?.roof;
-    if (type === 'campfire' || type === 'bed') return this.placeables.some((p) => Math.hypot(p.x - t.x, p.z - t.z) < 0.5);
+    if (FREE_PLACE[type]) return this.placeables.some((p) => Math.hypot(p.x - t.x, p.z - t.z) < 0.5);
     return this.edges.has(t.i + ',' + t.j + ',' + t.d);
   }
 
@@ -316,7 +324,8 @@ export class Building {
       obj.position.set((t.i + 0.5) * G, cell.level, (t.j + 0.5) * G);
       cell.obj = obj;
       this.cells.set(k, cell);
-      this.world.platforms.push({ minX: t.i * G - 0.05, maxX: (t.i + 1) * G + 0.05, minZ: t.j * G - 0.05, maxZ: (t.j + 1) * G + 0.05, top: cell.level });
+      cell.platform = { minX: t.i * G - 0.05, maxX: (t.i + 1) * G + 0.05, minZ: t.j * G - 0.05, maxZ: (t.j + 1) * G + 0.05, top: cell.level };
+      this.world.platforms.push(cell.platform);
     } else if (type === 'roof') {
       const cell = this.cells.get(this.key(t.i, t.j));
       if (!cell) return null;
@@ -325,11 +334,16 @@ export class Building {
       obj.position.set((t.i + 0.5) * G, cell.level + WALL_H, (t.j + 0.5) * G);
       obj.rotation.y = t.rot ? Math.PI / 2 : 0;
       cell.roofObj = obj;
-    } else if (type === 'campfire' || type === 'bed') {
+    } else if (FREE_PLACE[type]) {
       obj = pieceObject(type);
       obj.position.set(t.x, t.y, t.z);
       obj.rotation.y = t.rot;
       const pl = { type, x: t.x, y: t.y, z: t.z, rot: t.rot, obj };
+      if (type === 'farm_plot') pl.crop = t.crop ? { ...t.crop } : null;
+      if (t.data) pl.data = JSON.parse(JSON.stringify(t.data));
+      if (type === 'coop' || type === 'water_collector' || type === 'furnace' || type === 'drying_rack') { pl.collider = { x: t.x, z: t.z, r: type === 'coop' ? 0.9 : type === 'furnace' ? 0.8 : 0.55, h: t.y + 1.2 }; this.world.circles.push(pl.collider); }
+      if (STORAGE[type]) { pl.store = new Inventory(STORAGE[type]); if (t.store) pl.store.load(t.store); }
+      if (type === 'chest' || type === 'big_chest') { pl.collider = { x: t.x, z: t.z, r: type === 'chest' ? 0.5 : 0.7, h: t.y + 0.8 }; this.world.circles.push(pl.collider); }
       if (type === 'campfire') {
         pl.fire = this.fx.addFire(new THREE.Vector3(t.x, t.y + 0.1, t.z), 1);
         pl.collider = { x: t.x, z: t.z, r: 0.55, h: t.y + 0.5 };
@@ -344,7 +358,8 @@ export class Building {
       const mz = t.d === 'x' ? t.j * G : (t.j + 0.5) * G;
       obj.position.set(mx, lvl, mz);
       obj.rotation.y = t.d === 'x' ? 0 : Math.PI / 2;
-      this.edges.set(ek, { type, obj, i: t.i, j: t.j, d: t.d, level: lvl });
+      const edge = { type, obj, i: t.i, j: t.j, d: t.d, level: lvl, cols: [] };
+      this.edges.set(ek, edge);
       // colliders
       const ax = t.d === 'x' ? t.i * G : t.i * G, az = t.d === 'x' ? t.j * G : t.j * G;
       const bx = t.d === 'x' ? (t.i + 1) * G : t.i * G, bz = t.d === 'x' ? t.j * G : (t.j + 1) * G;
@@ -352,11 +367,11 @@ export class Building {
       if (type === 'doorway') {
         const ux = (bx - ax) / G, uz = (bz - az) / G;
         const g1 = G / 2 - 0.62;
-        this.world.walls.push({ ...W, ax, az, bx: ax + ux * g1, bz: az + uz * g1 });
-        this.world.walls.push({ ...W, ax: bx - ux * g1, az: bz - uz * g1, bx, bz });
+        edge.cols.push({ ...W, ax, az, bx: ax + ux * g1, bz: az + uz * g1 }, { ...W, ax: bx - ux * g1, az: bz - uz * g1, bx, bz });
       } else {
-        this.world.walls.push({ ...W, ax, az, bx, bz });
+        edge.cols.push({ ...W, ax, az, bx, bz });
       }
+      this.world.walls.push(...edge.cols);
     }
     this.scene.add(obj);
     if (animate) {
@@ -381,6 +396,68 @@ export class Building {
     }
   }
 
+  // ---------- demolition ----------
+  // What the player is pointing at (within reach, in front): { kind: 'edge'|'roof'|'foundation'|'free', ref, obj, type, blocked? }
+  pickBuilt(player, camYaw) {
+    const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), P = player.pos;
+    let best = null, bs = 1e9;
+    const consider = (x, y, z, rec) => {
+      const dx = x - P.x, dz = z - P.z, d = Math.hypot(dx, dz);
+      if (d > 4.5 || Math.abs(y - P.y) > 4) return;
+      const dot = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
+      if (dot < 0.35) return;
+      const sc = d - dot * 1.5 + rec.bias;
+      if (sc < bs) { bs = sc; best = rec; }
+    };
+    for (const p of this.placeables) consider(p.x, p.y, p.z, { kind: 'free', ref: p, obj: p.obj, type: p.type, bias: -0.6 });
+    for (const [k, e] of this.edges) consider(e.obj.position.x, e.level + 1, e.obj.position.z, { kind: 'edge', ref: e, key: k, obj: e.obj, type: e.type, bias: 0 });
+    for (const [k, c] of this.cells) {
+      const [i, j] = k.split(',').map(Number), cx = (i + 0.5) * G, cz = (j + 0.5) * G;
+      if (c.roof) consider(cx, c.level + 2, cz, { kind: 'roof', ref: c, key: k, obj: c.roofObj, type: 'roof', bias: 0.4 });
+      if (c.foundation) consider(cx, c.level, cz, { kind: 'foundation', ref: c, key: k, obj: c.obj, type: 'foundation', bias: 0.9 });
+    }
+    if (!best) return null;
+    if (best.kind === 'foundation') {
+      const [i, j] = best.key.split(',').map(Number);
+      const attached = best.ref.roof || [`${i},${j},x`, `${i},${j + 1},x`, `${i},${j},z`, `${i + 1},${j},z`].some((ek) => this.edges.has(ek) && !this._edgeHasOtherFloor(ek, i, j));
+      if (attached) best.blocked = 'Prima smonta pareti e tetto';
+    }
+    if (best.kind === 'free' && best.ref.store && best.ref.store.slots.some(Boolean)) best.blocked = 'Svuota prima la cassa';
+    if (best.kind === 'free' && best.type === 'coop' && (best.ref.data?.hens > 0 || best.ref.data?.eggs > 0)) best.blocked = 'Nel pollaio ci sono galline o uova';
+    if (best.kind === 'free' && best.type === 'furnace' && (best.ref.data?.ore > 0 || best.ref.data?.out > 0)) best.blocked = 'Svuota prima la fornace';
+    if (best.kind === 'free' && best.type === 'drying_rack' && best.ref.data?.hang?.length) best.blocked = 'Prima togli il cibo appeso';
+    return best;
+  }
+  _edgeHasOtherFloor(ek, i, j) {
+    const [ei, ej, d] = ek.split(',');
+    const other = d === 'x' ? (Number(ej) === j ? [i, j - 1] : [i, j]) : (Number(ei) === i ? [i - 1, j] : [i, j]);
+    return !!this.cells.get(this.key(other[0], other[1]))?.foundation;
+  }
+
+  // Removes a picked piece; returns its type (caller refunds resources)
+  demolish(t) {
+    const drop = (o) => { if (o) { this.scene.remove(o); this.fx.burst('dust', o.position.clone().add(new THREE.Vector3(0, 0.4, 0)), 14); } };
+    if (t.kind === 'free') {
+      const p = t.ref;
+      drop(p.obj);
+      if (p.fire) this.fx.removeFire(p.fire);
+      if (p.collider) { const i = this.world.circles.indexOf(p.collider); if (i >= 0) this.world.circles.splice(i, 1); }
+      this.placeables.splice(this.placeables.indexOf(p), 1);
+    } else if (t.kind === 'edge') {
+      drop(t.obj);
+      for (const c of t.ref.cols || []) { const i = this.world.walls.indexOf(c); if (i >= 0) this.world.walls.splice(i, 1); }
+      this.edges.delete(t.key);
+    } else if (t.kind === 'roof') {
+      drop(t.obj);
+      t.ref.roof = false; t.ref.roofObj = null;
+    } else if (t.kind === 'foundation') {
+      drop(t.obj);
+      const i = this.world.platforms.indexOf(t.ref.platform); if (i >= 0) this.world.platforms.splice(i, 1);
+      this.cells.delete(t.key);
+    }
+    return t.type;
+  }
+
   // shelter: a cell with foundation + roof + all 4 walls (at least one doorway)
   shelterCells() {
     const out = [];
@@ -402,14 +479,16 @@ export class Building {
     let foundation = 0, walls = 0, doorway = 0, roof = 0;
     for (const c of this.cells.values()) { if (c.foundation) foundation++; if (c.roof) roof++; }
     for (const e of this.edges.values()) { walls++; if (e.type === 'doorway') doorway++; }
-    return { foundation, walls, doorway, roof, campfire: this.placeables.filter((p) => p.type === 'campfire').length, bed: this.placeables.filter((p) => p.type === 'bed').length };
+    const out = { foundation, walls, doorway, roof };
+    for (const k of Object.keys(FREE_PLACE)) out[k] = this.placeables.filter((p) => p.type === k).length;
+    return out;
   }
 
   toJSON() {
     const cells = [];
     for (const [k, c] of this.cells) { const [i, j] = k.split(',').map(Number); cells.push({ i, j, level: c.level, roof: !!c.roof, roofRot: c.roofRot || 0 }); }
     const edges = [...this.edges.values()].map((e) => ({ i: e.i, j: e.j, d: e.d, type: e.type, level: e.level }));
-    const placeables = this.placeables.map((p) => ({ type: p.type, x: p.x, y: p.y, z: p.z, rot: p.rot }));
+    const placeables = this.placeables.map((p) => ({ type: p.type, x: p.x, y: p.y, z: p.z, rot: p.rot, ...(p.crop !== undefined ? { crop: p.crop } : {}), ...(p.store ? { store: p.store.toJSON() } : {}), ...(p.data ? { data: p.data } : {}) }));
     return { cells, edges, placeables };
   }
 

@@ -12,7 +12,7 @@ import { ASSETS } from './assets.js';
 // Scanned rock (Poly Haven boulder_01) seen from different sides gives several silhouettes from one asset.
 // mode 'boulder': x/z extent ±1, y from -0.3 to 1.1 (sits sunk into the ground); 'block': centred box ±1.
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
-function scanRockVariants(mode) {
+export function scanRockVariants(mode) {
   const rots = [[0, 0, 0], [Math.PI / 2, 0, 0.3], [Math.PI, 0.7, 0], [0.2, 0, Math.PI / 2], [-Math.PI / 2, 1.2, 0]];
   return rots.map((r) => ['boulder', 'boulder_lod'].map((n) => {
     const src = ASSETS.models[n][0];
@@ -194,7 +194,7 @@ export class Nature {
     for (let i = 0; i < tries; i++) {
       const x = (r() * 2 - 1) * 460, z = (r() * 2 - 1) * 460;
       const s = T.coastDist(x, z);
-      if (s < -2) continue;
+      if (s < -2 || T.inCaveArea(x, z)) continue;
       const h = T.heightAt(x, z);
       if (h < 0.3) continue;
       const slope = T.slopeAt(x, z);
@@ -214,7 +214,7 @@ export class Nature {
     const T = this.terrain, M = this.M, R = this.rnd, scene = this.scene;
     const pondOk = (x, z, pad) => !T.isInPond(x, z, pad);
     this.pickupPools = {};
-    for (const id of ['stick', 'stone', 'coconut', 'wood']) {
+    for (const id of ['stick', 'stone', 'coconut', 'wood', 'egg']) {
       this.pickupPools[id] = new Pool(scene, [{ geo: itemGeometry(id), mat: itemMaterial }], 520, { near: 30, far: 90 });
     }
 
@@ -274,7 +274,7 @@ export class Nature {
     const cliffSpots = [];
     for (let x = -470; x < 470; x += 2.5) for (let z = -470; z < 470; z += 2.5) { // scan the grid for cliff faces
       const jx = x + (R() - 0.5) * 2.5, jz = z + (R() - 0.5) * 2.5;
-      if (T.heightAt(jx, jz) < 1.5) continue;
+      if (T.heightAt(jx, jz) < 1.5 || T.inCaveArea(jx, jz, 3)) continue;
       const sl = T.slopeAt(jx, jz);
       if (sl < 0.36) continue;
       cliffSpots.push({ x: jx, z: jz, sl });
@@ -546,6 +546,9 @@ export class Nature {
     for (const o of this.occupied.map.values()) for (const c of o) if (c.r > 2.5 && c.r < 6) spots.push({ x: c.x, z: c.z, r: c.r * 1.3, k: 0.3 });
     if (T.mesh) T.bakeOcclusion(spots);
 
+    // wild bird nests in the jungle: eggs to eat or to hatch in a coop (placed last so older saves keep their resource ids)
+    this.sample(({ jw, slope, pd, h }) => jw > 0.5 && slope < 0.3 && pd > 3 && h > 3, 20000).slice(0, 40)
+      .forEach(({ x, z }) => this._pickup('egg', x, z));
     this.pools = [...this.fernPools, ...this.boulderPools, ...this.cliffPools, ...(this.shelfPool ? [this.shelfPool] : []), ...this.nodePools, ...this.palmPools, ...this.junglePools, ...bushPools, ...plantPools.map((p) => p.pool), ...banPools, fiberPool, flowerPool, berryPool, berryFruitPool, ...Object.values(this.pickupPools)];
     for (const p of this.pools) p.finalize();
     this.cliffRocks = cliffRocks;
@@ -561,11 +564,11 @@ export class Nature {
     const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
     _q.multiply(qy);
     const s = id === 'wood' ? 1.8 : 1.15;
-    const lift = { stick: 0.03, stone: 0.05, coconut: 0.1, wood: 0.18 }[id];
+    const lift = { stick: 0.03, stone: 0.05, coconut: 0.1, wood: 0.18, egg: 0.06 }[id];
     _m.compose(_p.set(x, y + lift, z), _q, _s.set(s, s, s));
     const idx = pool.add(_m);
     if (idx < 0) return;
-    const labels = { stick: 'Bastone', stone: 'Pietra', coconut: 'Cocco', wood: 'Legno trasportato' };
+    const labels = { stick: 'Bastone', stone: 'Pietra', coconut: 'Cocco', wood: 'Legno trasportato', egg: 'Uovo selvatico' };
     this.addResource({ kind: 'pickup', item: id, x, z, y, r: 0.45, hp: 1, pool, idx, label: labels[id] });
   }
 
@@ -580,7 +583,7 @@ export class Nature {
     for (let x = -450; x < 450; x += step) {
       for (let z = -450; z < 450; z += step) {
         const px = x + (R() - 0.5) * step, pz = z + (R() - 0.5) * step;
-        if (T.coastDist(px, pz) < 4) continue;
+        if (T.coastDist(px, pz) < 4 || T.inCaveArea(px, pz)) continue;
         const h = T.heightAt(px, pz);
         if (h < 2.0) continue;
         // meadows: thick in clearings, patchy elsewhere, thin under the jungle canopy

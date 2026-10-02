@@ -208,10 +208,11 @@ export class Props {
     hg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     hg.setIndex(idx);
     const hole = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: true }));
-    scene.add(hole);
+    const openCave = !!T.cavePath; // the cave is carved and walkable now: no painted-on opening, no arch blocking it
+    if (!openCave) scene.add(hole);
     // chunky rock frame and rubble around the opening
     const frame = [];
-    for (let k = 0; k < 13; k++) {
+    for (let k = 0; k < (openCave ? 0 : 13); k++) {
       const a = (k / 12) * Math.PI;
       const g = boulderGeometry(900 + k, { detail: 10, rough: 0.35, moss: 0.5, tint: [0.46, 0.43, 0.39] });
       const s = 0.9 + (k % 3) * 0.35;

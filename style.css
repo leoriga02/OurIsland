@@ -303,3 +303,28 @@ button { font-family: inherit; color: inherit; border: 0; background: none; curs
   .title-inner { margin-top: 4vh; gap: 6px; }
   .logo span:last-child { font-size: 40px; }
 }
+
+/* progression / feedback additions */
+#quest .qgoal { color: #f2d48a; font-size: 11px; margin-top: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(150,10,0,0.55) 100%); z-index: 4; }
+#hurt.on { opacity: 1; transition: opacity 0.06s; }
+#bb-demolish.on { background: #b8452e; border-color: #ff9a7a; color: #fff; }
+#inv-sort { margin-top: 6px; align-self: flex-start; }
+.citem.locked { opacity: 0.45; filter: grayscale(0.8); }
+.tierhdr { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #d9c48e; margin: 8px 2px 2px; opacity: 0.9; }
+.tierhdr.locked { color: #9a9488; }
+.bpiece.locked { opacity: 0.35; }
+.slot.chest { border-color: rgba(242, 212, 138, 0.45); }
+#crosshair { display: none; position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,0.75); box-shadow: 0 0 3px rgba(0,0,0,0.6); pointer-events: none; z-index: 3; }
+body.fp.playing #crosshair { display: block; }
+/* storage view: two compact grids side by side, details under the chest grid */
+#panel.chestmode .grid { grid-template-columns: repeat(6, 40px); gap: 4px; }
+#panel.chestmode .grid .slot { width: 40px; height: 40px; }
+#panel.chestmode .craft-wrap { flex-direction: column; gap: 6px; }
+#panel.chestmode #craft-list { max-height: none; overflow: visible; }
+#panel.chestmode .craft-btn { padding: 8px 12px; font-size: 14px; }
+#panel.chestmode #inv-detail, #panel.chestmode #craft-detail { font-size: 12px; }
+#quest .qshort { color: #bfe8ff; font-size: 11.5px; margin-bottom: 3px; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+#quest .qlong { color: #a8d88a; font-size: 11px; margin-top: 3px; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+#buffs { position: absolute; left: 14px; top: 132px; display: flex; gap: 4px; font-size: 12px; pointer-events: none; }
+#buffs span { background: rgba(10,16,22,0.55); border-radius: 8px; padding: 2px 6px; color: #f5ecd6; }
