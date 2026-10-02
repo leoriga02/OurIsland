@@ -26,34 +26,60 @@ export const ITEMS = {
   meat_cooked: { name: 'Carne arrostita', desc: 'Sostanziosa. Ripristina cibo e salute.', stack: 20, food: 45, health: 15 },
   hide: { name: 'Pelle', desc: 'Pelle grezza di cinghiale. Servirà per nuovi oggetti.', stack: 20 },
   egg: { name: 'Uovo', desc: 'Piccolo ma nutriente. +Cibo', stack: 20, food: 10 },
+  chest: { name: 'Cassa di legno', desc: 'Deposito da 12 spazi per le tue risorse.', stack: 5, place: 'chest' },
+  big_chest: { name: 'Baule', desc: 'Grande deposito da 24 spazi.', stack: 5, place: 'big_chest' },
+  axe2: { name: 'Ascia rinforzata', desc: 'Abbatte gli alberi in metà dei colpi.', stack: 1, tool: 'axe', power: 2, dmg: 5 },
+  spear2: { name: 'Lancia rinforzata', desc: 'Punta temprata e impugnatura in pelle. Molto più letale.', stack: 1, tool: 'spear', dmg: 7 },
 };
 
+// Crafting tiers: each unlocks once its requirement is met (req reads game progress; label says how).
+export const TIERS = [
+  { id: 1, name: 'Sopravvivenza', req: () => true, how: '' },
+  { id: 2, name: 'Base', req: (p) => p.felled >= 1, how: 'Abbatti il tuo primo albero' },
+  { id: 3, name: 'Coltivazione', req: (p) => !!p.shelterDone, how: 'Completa un rifugio (fondazione, pareti, tetto)' },
+  { id: 4, name: 'Attrezzi migliori', req: (p) => !!p.blueprints?.tools2, how: 'Trova il progetto nascosto nella grotta' },
+  { id: 5, name: 'Costruzione avanzata', req: (p) => !!p.blueprints?.build2, how: 'Trova il progetto nella caletta nascosta' },
+];
+export const tierUnlocked = (tier, progress) => (TIERS.find((t) => t.id === (tier || 1)) || TIERS[0]).req(progress);
+
+// Storage containers (placeables with their own inventory)
+export const STORAGE = { chest: 12, big_chest: 24 };
+
 // Damage dealt by whatever is in hand (bare hands = 1).
-export const WEAPON_DMG = { spear: 4, axe: 3, pickaxe: 3, torch: 1 };
+export const WEAPON_DMG = { spear: 4, axe: 3, pickaxe: 3, torch: 1, axe2: 5, spear2: 7 };
 
 // Cooking at a campfire: raw -> cooked (data-driven so new foods only need a line here).
 export const COOKING = { crab_raw: 'crab_cooked', meat_raw: 'meat_cooked' };
 
 // Items that are placed freely on the ground (not grid-snapped): placement distance and footprint radius.
-export const FREE_PLACE = { campfire: { d: 1.8, r: 0.7 }, bed: { d: 2.2, r: 0.7 }, farm_plot: { d: 2.6, r: 1.3 } };
+export const FREE_PLACE = { campfire: { d: 1.8, r: 0.7 }, bed: { d: 2.2, r: 0.7 }, farm_plot: { d: 2.6, r: 1.3 }, chest: { d: 1.8, r: 0.6 }, big_chest: { d: 2.0, r: 0.8 } };
 
 export const RECIPES = [
-  { out: 'axe', cost: { stick: 2, stone: 2, fiber: 3 }, cat: 'tools' },
-  { out: 'pickaxe', cost: { stick: 2, stone: 3, fiber: 3 }, cat: 'tools' },
-  { out: 'torch', cost: { stick: 1, fiber: 2 }, cat: 'tools' },
-  { out: 'rope', n: 1, cost: { fiber: 3 }, cat: 'materials' },
-  { out: 'campfire', cost: { wood: 3, stone: 5, stick: 2 }, cat: 'camp' },
-  { out: 'bed', cost: { leaf: 6, wood: 3, rope: 2 }, cat: 'camp' },
-  { out: 'spear', cost: { stick: 2, stone: 1, fiber: 2 }, cat: 'tools' },
-  { out: 'farm_plot', cost: { stick: 4, stone: 2, fiber: 2 }, cat: 'camp' },
+  // 1 · Sopravvivenza
+  { out: 'axe', cost: { stick: 2, stone: 2, fiber: 3 }, tier: 1 },
+  { out: 'rope', n: 1, cost: { fiber: 3 }, tier: 1 },
+  { out: 'spear', cost: { stick: 2, stone: 1, fiber: 2 }, tier: 1 },
+  { out: 'torch', cost: { stick: 1, fiber: 2 }, tier: 1 },
+  { out: 'campfire', cost: { wood: 3, stone: 5, stick: 2 }, tier: 1 },
+  // 2 · Base
+  { out: 'pickaxe', cost: { stick: 2, stone: 3, fiber: 3 }, tier: 2 },
+  { out: 'chest', cost: { wood: 6, rope: 1 }, tier: 2 },
+  { out: 'bed', cost: { leaf: 6, wood: 3, rope: 2 }, tier: 2 },
+  // 3 · Coltivazione
+  { out: 'farm_plot', cost: { stick: 4, stone: 2, fiber: 2 }, tier: 3 },
+  // 4 · Attrezzi migliori
+  { out: 'axe2', cost: { axe: 1, wood: 2, rope: 2, stone: 3 }, tier: 4 },
+  { out: 'spear2', cost: { spear: 1, hide: 1, rope: 1, stone: 2 }, tier: 4 },
+  // 5 · Costruzione avanzata
+  { out: 'big_chest', cost: { wood: 10, rope: 2, hide: 1 }, tier: 5 },
 ];
 
 export const PIECES = {
-  foundation: { name: 'Fondazione in legno', desc: 'Un pavimento rialzato di assi. Ogni casa parte da qui.', cost: { wood: 4, rope: 1 } },
-  wall: { name: 'Parete in legno', desc: 'Una parete robusta di tronchi legati.', cost: { wood: 3 } },
-  doorway: { name: 'Porta', desc: 'Una parete con un passaggio.', cost: { wood: 3 } },
-  window: { name: 'Finestra', desc: 'Lascia entrare la brezza marina.', cost: { wood: 3 } },
-  roof: { name: 'Tetto di paglia', desc: 'Foglie di palma su un telaio di legno.', cost: { wood: 2, leaf: 4 } },
+  foundation: { name: 'Fondazione in legno', desc: 'Un pavimento rialzato di assi. Ogni casa parte da qui.', cost: { wood: 4, rope: 1 }, tier: 2 },
+  wall: { name: 'Parete in legno', desc: 'Una parete robusta di tronchi legati.', cost: { wood: 3 }, tier: 2 },
+  doorway: { name: 'Porta', desc: 'Una parete con un passaggio.', cost: { wood: 3 }, tier: 2 },
+  window: { name: 'Finestra', desc: 'Lascia entrare la brezza marina.', cost: { wood: 3 }, tier: 5 },
+  roof: { name: 'Tetto di paglia', desc: 'Foglie di palma su un telaio di legno.', cost: { wood: 2, leaf: 4 }, tier: 2 },
 };
 
 // ---------------- item models (vertex-coloured merged geometry) ----------------
@@ -397,12 +423,33 @@ export function farmPlotGeo(scale = 1) {
   return g;
 }
 
+// Wooden storage chest with iron bands (also used, scaled, for the exploration crates)
+export function chestGeo(w = 0.9, h = 0.6, d = 0.6) {
+  const parts = [];
+  const body = new THREE.BoxGeometry(w, h * 0.72, d, 4, 2, 2); body.translate(0, h * 0.36, 0); noisy(body, 0x8a5e36, 0.22, 7);
+  const lid = new THREE.BoxGeometry(w * 1.03, h * 0.28, d * 1.04, 4, 1, 2); lid.translate(0, h * 0.86, 0); noisy(lid, 0x76502e, 0.22, 7);
+  parts.push(body, lid);
+  for (const x of [-w * 0.32, w * 0.32]) {
+    const band = new THREE.BoxGeometry(0.05, h * 1.02, d * 1.07); band.translate(x, h * 0.5, 0); col(band, 0x3a3631);
+    parts.push(band);
+  }
+  const lock = new THREE.BoxGeometry(0.1, 0.12, 0.04); lock.translate(0, h * 0.72, d * 0.53); col(lock, 0x6a6258);
+  parts.push(lock);
+  return merge(parts);
+}
+function tinted(geo, mul) {
+  const g = geo.clone(), c = g.attributes.color;
+  for (let i = 0; i < c.count; i++) c.setXYZ(i, c.getX(i) * mul[0], c.getY(i) * mul[1], c.getZ(i) * mul[2]);
+  return g;
+}
+
 const builders = {
   wood: () => logGeo(), stick: stickGeo, stone: () => stoneGeo(), fiber: fiberGeo, leaf: leafGeo,
   rope: ropeGeo, coconut: coconutGeo, berries: berriesGeo, crab_raw: () => crabGeo(false), crab_cooked: () => crabGeo(true),
   axe: axeGeo, pickaxe: pickaxeGeo, torch: torchGeo, campfire: () => campfireGeo(0.5), bed: () => bedGeo(),
   spear: spearGeo, fiber_sprout: sproutGeo, farm_plot: () => farmPlotGeo(0.35), meat_raw: () => meatGeo(false), meat_cooked: () => meatGeo(true),
-  hide: hideGeo, egg: eggGeo,
+  hide: hideGeo, egg: eggGeo, chest: () => chestGeo(0.55, 0.36, 0.38), big_chest: () => chestGeo(0.7, 0.42, 0.42),
+  axe2: () => tinted(axeGeo(), [0.85, 0.95, 1.15]), spear2: () => tinted(spearGeo(), [1.15, 0.92, 0.8]),
 };
 
 const geoCache = {};

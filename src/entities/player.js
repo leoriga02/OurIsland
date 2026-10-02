@@ -173,14 +173,41 @@ export class CameraRig {
 
   shake(amp = 0.08, t = 0.25) { this.shakeAmp = amp; this.shakeT = t; }
 
+  // First person: eyes at head height, body faces where you look, gentle head bob while walking.
+  _firstPerson(dt, player) {
+    const eyeY = player.pos.y + (player.swimming ? 1.72 : 1.62);
+    this.target.set(player.pos.x, eyeY, player.pos.z);
+    this.bob = (this.bob || 0) + dt * player.speed * 1.9;
+    const bobA = player.grounded && !player.swimming ? Math.min(1, player.speed / 4) * 0.035 : 0;
+    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+    const fx = -Math.sin(this.yaw) * cp, fy = -sp, fz = -Math.cos(this.yaw) * cp;
+    this.pos.set(player.pos.x - Math.sin(this.yaw) * 0.12, eyeY + Math.sin(this.bob * 2) * bobA, player.pos.z - Math.cos(this.yaw) * 0.12);
+    const minY = this.world.waterLevel(this.pos.x, this.pos.z) + (player.swimming ? 0.25 : -10);
+    if (this.pos.y < minY) this.pos.y = minY;
+    this.camera.position.copy(this.pos);
+    const baseFov = this.baseFov || (this.baseFov = this.camera.fov);
+    const wantFov = baseFov + 6 + (player.running && player.speed > 5 ? 5 : 0);
+    if (Math.abs(this.camera.fov - wantFov) > 0.05) { this.camera.fov = damp(this.camera.fov, wantFov, 5, dt); this.camera.updateProjectionMatrix(); }
+    if (this.shakeT > 0) {
+      this.shakeT -= dt;
+      const a = this.shakeAmp * Math.max(0, this.shakeT) * 3;
+      this.camera.position.x += (Math.random() - 0.5) * a;
+      this.camera.position.y += (Math.random() - 0.5) * a;
+    }
+    this.camera.lookAt(this.pos.x + fx, this.pos.y + fy, this.pos.z + fz);
+    // the body follows the view so interaction targets are what you look at
+    if (!player.frozen) player.facing = this.yaw + Math.PI;
+  }
+
   update(dt, player, intent) {
     const now = performance.now();
     if (intent) {
       if (intent.look.dx || intent.look.dy) this.lastInput = now;
       this.yaw -= intent.look.dx * 0.0052;
-      this.pitch = clamp(this.pitch + intent.look.dy * 0.004, -0.25, 1.25);
+      this.pitch = clamp(this.pitch + intent.look.dy * 0.004, this.firstPerson ? -1.2 : -0.25, this.firstPerson ? 1.25 : 1.25);
       this.dist = clamp(this.dist + intent.zoom, 2.8, 11);
     }
+    if (this.firstPerson && !this.cinematic) { this._firstPerson(dt, player); return; }
     // build mode: pull back and look down a bit for an overview
     this.buildBlend = damp(this.buildBlend || 0, this.building ? 1 : 0, 4, dt);
     // gentle auto-follow behind the player while moving

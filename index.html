@@ -51,6 +51,7 @@
       <div id="build-pieces"></div>
       <div id="build-ctrls">
         <button id="bb-rotate" class="pill">⟳ Ruota</button>
+        <button id="bb-demolish" class="pill">⛏ Smonta</button>
         <button id="bb-cancel" class="pill">✕ Fine</button>
       </div>
     </div>
@@ -70,12 +71,14 @@
         <h2>Inventario</h2>
         <div id="inv-grid" class="grid"></div>
         <div id="inv-detail" class="detail"></div>
+        <button id="inv-sort" class="pill small">⇅ Ordina zaino</button>
       </div>
       <div id="settings-box" class="box hidden">
         <h2>Impostazioni</h2>
         <div class="set-row"><span>Effetti sonori</span><button class="pill" data-set="sfx"></button></div>
         <div class="set-row"><span>Musica</span><button class="pill" data-set="music"></button></div>
         <div class="set-row"><span>Grafica</span><button class="pill" data-set="quality"></button></div>
+        <div class="set-row"><span>Visuale</span><button class="pill" data-set="view"></button></div>
         <div class="set-row"><span>Visuale automatica</span><button class="pill" data-set="follow"></button></div>
         <div class="set-row"><span>Salva la partita adesso</span><button class="pill primary" data-set="save">Salva partita</button></div>
         <div class="set-row"><span>Ricomincia su una nuova isola</span><button class="pill danger" data-set="reset">Azzera</button></div>
@@ -124,6 +127,8 @@
       <div class="hint" id="title-hint"></div>
     </div>
   </div>
+  <div id="hurt"></div>
+  <div id="crosshair"></div>
   <div id="fade"></div>
   <div id="rotate-hint">↻ Ruota il telefono in orizzontale</div>
   <div id="loading"><div class="spin"></div><div>Approdo sull’isola…</div></div>

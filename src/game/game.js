@@ -15,10 +15,11 @@ import { Wildlife } from '../entities/wildlife.js';
 import { Birds } from '../entities/birds.js';
 import { Input } from '../input.js';
 import { Inventory, HOTBAR } from './inventory.js';
-import { ITEMS, RECIPES, PIECES, FREE_PLACE, WEAPON_DMG, COOKING, itemMesh } from './items.js';
+import { ITEMS, RECIPES, PIECES, FREE_PLACE, WEAPON_DMG, COOKING, STORAGE, TIERS, tierUnlocked, itemMesh } from './items.js';
+import { Caches, BLUEPRINTS } from './caches.js';
 import { Farming, CROPS, SEED_CROP } from './farming.js';
 import { Building, pieceObject } from './building.js';
-import { QUESTS, FREE_PLAY } from './quests.js';
+import { QUESTS, FREE_PLAY, LEGACY_ORDER } from './quests.js';
 import { Fx } from '../fx/fx.js';
 import { Audio } from '../fx/audio.js';
 import { UI } from '../ui/ui.js';
@@ -28,15 +29,20 @@ import { clamp } from '../util/noise.js';
 
 const SAVE_KEY = 'ourisland-save-v2'; // v2: Island 2.0 layout (v1 saves belong to the old island)
 // Save format version inside SAVE_KEY. Bump it and add a step to migrateSave() whenever the format changes.
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 function migrateSave(d) {
   if (!d || typeof d.v !== 'number') return null;
   if (d.v < 3) { d.progress = d.progress || {}; d.progress.playTime = d.progress.playTime || 0; d.v = 3; } // v3: play clock (crops), farm plots
+  if (d.v < 4) { // v4: quests saved by id (the list was reordered), exploration caches, blueprints
+    const old = LEGACY_ORDER[d.questIndex ?? 0];
+    d.questId = old ? old : 'done';
+    d.v = 4;
+  }
   return d.v === SAVE_VERSION ? d : null;
 }
 const GUEST_KEY = 'ourisland-guest-v1'; // a guest keeps their own backpack & progress; the world belongs to the host
-const REACH = { pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0, farm_plot: 1.6, animal: 2.0 };
-const PLACED0 = { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0, farm_plot: 0 };
+const REACH = { pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0, farm_plot: 1.6, animal: 2.0, cache: 1.6, chest: 1.6, big_chest: 1.7 };
+const PLACED0 = { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0, farm_plot: 0, chest: 0, big_chest: 0 };
 
 export class Game {
   constructor({ renderer, scene, camera, quality, canvas, mode = 'solo' }) {
@@ -48,10 +54,10 @@ export class Game {
     this.started = false;
     this.dead = false;
     this.stats = { health: 100, water: 72, food: 80 };
-    this.progress = { col: {}, crafted: {}, ate: {}, placed: { ...PLACED0 }, felled: 0, drank: 0, slept: 0, reachedPeak: false, playTime: 0, killed: {} };
+    this.progress = { col: {}, crafted: {}, ate: {}, placed: { ...PLACED0 }, felled: 0, drank: 0, slept: 0, reachedPeak: false, playTime: 0, killed: {}, caches: {}, blueprints: {}, planted: 0, harvested: 0 };
     this.questIndex = 0;
     this.actionCooldown = 0;
-    this.settings = { sfx: true, music: true, quality: quality >= 1 ? 'high' : 'low', follow: true, character: mode === 'guest' ? 'f' : 'm', name: '' };
+    this.settings = { sfx: true, music: true, quality: quality >= 1 ? 'high' : 'low', follow: true, character: mode === 'guest' ? 'f' : 'm', name: '', view: 'fp' };
     try { Object.assign(this.settings, JSON.parse(localStorage.getItem('ourisland-settings') || '{}')); } catch { /* ignore */ }
     this.target = null;
   }
@@ -77,6 +83,19 @@ export class Game {
     this.crabs = new Crabs(scene, this.terrain, 14);
     this.wildlife = new Wildlife(scene, this.terrain, { test: new URLSearchParams(location.search).has('testfauna') });
     this.farming = new Farming(this);
+    this.caches = new Caches(scene, this.terrain, this.nature);
+    // subtle ring under whatever the action button will use
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.7, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0.0, depthWrite: false }));
+    this.ring.renderOrder = 3;
+    scene.add(this.ring);
+    // first-person viewmodel: the held tool in front of the camera
+    this.viewModel = new THREE.Group();
+    this.camera.add(this.viewModel);
+    scene.add(this.camera);
+    this.sky.sun.shadow.camera.layers.enable(2); // the local body still casts a shadow when hidden in first person
+    this.demoBox = new THREE.BoxHelper(undefined, 0xff6a50);
+    this.demoBox.visible = false;
+    scene.add(this.demoBox);
     this.birds = new Birds(scene, 10);
     this.player = new Player(scene, this.world, this.settings.character);
     this.rig = new CameraRig(this.camera, this.world);
@@ -140,6 +159,8 @@ export class Game {
     if (code === 'KeyC') this.ui.openPanel('craft');
     if (code === 'KeyB') this.toggleBuild();
     if (code === 'KeyR' && this.building.active) this.building.rotate();
+    if (code === 'KeyV') this.toggleSetting('view');
+    if (code === 'KeyX' && this.building.active) this.setDemolish(!this.building.demolishMode);
     if ((code === 'Escape' || code === 'KeyQ')) { if (this.panelOpen) this.ui.closePanel(); else if (this.building.active) this.toggleBuild(false); }
     if ((code === 'KeyE' || code === 'KeyF') && this.building.active) this.tryPlace();
   }
@@ -190,7 +211,14 @@ export class Game {
     this._heldId = id;
     const c = this.player.char;
     c.holdPose = id === 'torch' ? 'torch' : null;
+    this.viewModel.clear();
     if (!id) { c.setHeld(null); this.fx.torch = null; return; }
+    const vm = itemMesh(id);
+    vm.castShadow = false;
+    vm.scale.setScalar(0.9);
+    vm.rotation.set(-0.15, 0.55, -0.1);
+    this.viewModel.add(vm);
+    this.viewModel.position.set(0.3, -0.36, -0.55);
     const m = itemMesh(id);
     m.scale.setScalar(1.4);
     if (id === 'torch') {
@@ -201,13 +229,23 @@ export class Game {
       m.add(fl);
       this.fx.torch = fl;
       this._torchFlame = fl;
+      const vf = fl.clone(); vf.material = fl.material; vf.scale.set(0.09, 0.16, 1); vf.position.set(0, 0.3, 0); vm.add(vf);
     } else this.fx.torch = null;
     c.setHeld(m);
+    this.applyView();
   }
 
+  // best item in the bag for a tool kind ('axe', 'pickaxe', 'spear'…), by power
+  bestToolSlot(kind) {
+    let best = -1, bp = -1;
+    this.inv.slots.forEach((s, i) => { if (s && (ITEMS[s.id].tool === kind) && (ITEMS[s.id].power || 1) > bp) { bp = ITEMS[s.id].power || 1; best = i; } });
+    return best;
+  }
+  hasTool(kind) { return this.bestToolSlot(kind) >= 0; }
   ensureTool(tool) {
-    if (this.heldTool() === tool) return true;
-    const idx = this.inv.slots.findIndex((s) => s && s.id === tool);
+    const held = this.heldTool();
+    const idx = this.bestToolSlot(tool);
+    if (held && ITEMS[held].tool === tool && (idx < 0 || (ITEMS[held].power || 1) >= (ITEMS[this.inv.slots[idx].id].power || 1))) return true;
     if (idx < 0) return false;
     if (idx >= HOTBAR) { this.useSlot(idx); return true; }
     this.selected = idx;
@@ -227,13 +265,16 @@ export class Game {
       if (item) this.ui.center(`Posiziona: ${ITEMS[p].name}`, 'Mira con la visuale · tocca il tasto azione', 1800);
       else if (this.buildHints <= 2) this.ui.center('Costruzione', 'Mira con la visuale · posiziona con il tasto azione', 2200);
     } else {
+      if (this.building.demolishMode) this.setDemolish(false);
       this.building.exit();
       this.ui.showBuildBar(false);
     }
   }
 
   // ---------------- crafting / consuming ----------------
+  recipeUnlocked(r) { return tierUnlocked(r.tier, this.progress); }
   craft(r) {
+    if (!this.recipeUnlocked(r)) { this.ui.toast(null, 'Non ancora sbloccato', true); this.audio.error(); return; }
     if (!this.inv.consume(r.cost)) { this.audio.error(); return; }
     const n = r.n || 1;
     const left = this.inv.add(r.out, n);
@@ -329,6 +370,7 @@ export class Game {
     for (const r of this.nature.query(p.x, p.z, 5)) if (r.alive) consider(r, r.kind, REACH[r.kind] || 1.5);
     for (const c of this.crabs.list) if (c.alive) consider(c, 'crab', REACH.crab);
     for (const a of this.wildlife.list) if (a.alive) consider(a, 'animal', REACH.animal);
+    for (const cc of this.caches.list) if (!cc.opened) consider(cc, 'cache', REACH.cache);
     for (const pl of this.building.placeables) consider({ ...pl, r: pl.type === 'farm_plot' ? 1.0 : 0.5, ref: pl }, pl.type, REACH[pl.type] || 2);
     if (best) return best;
     // water
@@ -351,11 +393,11 @@ export class Game {
       case 'fiber': return { label: 'Raccogli', icon: 'hand', ready: true, name: 'Pianta da fibra' };
       case 'berry': return { label: 'Raccogli', icon: 'eat', ready: true, name: 'Cespuglio di bacche' };
       case 'palm': case 'tree': {
-        const has = this.inv.count('axe') > 0;
-        return { label: has ? 'Taglia' : 'Serve l’ascia', icon: 'item:axe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
+        const has = this.hasTool('axe');
+        return { label: has ? 'Taglia' : 'Serve l’ascia', icon: 'item:' + (has ? this.inv.slots[this.bestToolSlot('axe')].id : 'axe'), ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
       }
       case 'node': {
-        const has = this.inv.count('pickaxe') > 0;
+        const has = this.hasTool('pickaxe');
         return { label: has ? 'Scava' : 'Serve il piccone', icon: 'item:pickaxe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
       }
       case 'crab': return { label: 'Cattura', icon: 'hand', ready: true, name: 'Granchio' };
@@ -369,6 +411,8 @@ export class Game {
         const c = CROPS[pl.crop.id];
         return F.ripe(pl) ? { label: 'Raccogli', icon: 'hand', ready: true, name: c.name + ' matura' } : { label: 'In crescita', icon: 'hand', ready: false, name: `${c.name} ${Math.floor(F.growth(pl) * 100)}%`, hp: F.growth(pl) };
       }
+      case 'cache': return { label: 'Apri', icon: 'hand', ready: true, name: o.label };
+      case 'chest': case 'big_chest': return { label: 'Apri', icon: 'hand', ready: true, name: ITEMS[t.kind].name };
       case 'animal': {
         const w = this.heldTool();
         return { label: 'Attacca', icon: w && w !== 'torch' ? 'item:' + w : 'hand', ready: true, name: o.label, hp: o.hp < o.sp.hp ? o.hp / o.sp.hp : null };
@@ -429,7 +473,7 @@ export class Game {
         this.audio.swing();
         c.play('chop', 0.62, () => {
           if (!o.alive) return;
-          o.hp--;
+          o.hp -= ITEMS[this.heldTool()]?.power || 1;
           const hitAt = new THREE.Vector3(o.x, o.y + 1.1, o.z).addScaledVector(P.forward, -0.35);
           this.fx.burst('wood', hitAt, 14);
           this.audio.chop();
@@ -536,6 +580,35 @@ export class Game {
         }
         break;
       }
+      case 'cache': {
+        this.faceTarget(o);
+        c.play('gather', 0.7, () => {
+          if (o.opened) return;
+          this.caches.open(o);
+          this.progress.caches[o.id] = true;
+          this.audio.chest();
+          const at = new THREE.Vector3(o.x, o.y + 0.7, o.z);
+          this.fx.sparkle(at, 14, 0xffe2a0);
+          for (const [id, n] of Object.entries(o.loot)) this.give(id, n, false, at);
+          if (o.blueprint && !this.progress.blueprints[o.blueprint]) {
+            this.progress.blueprints[o.blueprint] = true;
+            const b = BLUEPRINTS[o.blueprint];
+            setTimeout(() => { this.ui.center('Nuovo progetto: ' + b.name, b.desc + ' · ora nella scheda Crea', 3200); this.audio.quest(); }, 600);
+          }
+          this.checkQuest();
+          this.save();
+        }, 0.6);
+        this.actionCooldown = 0.9;
+        break;
+      }
+      case 'chest': case 'big_chest': {
+        this.faceTarget(o);
+        this.audio.chest();
+        this.openChest = o.ref;
+        this.ui.openPanel('chest');
+        this.actionCooldown = 0.5;
+        break;
+      }
       case 'farm_plot': {
         const pl = o.ref;
         this.faceTarget(o);
@@ -545,6 +618,8 @@ export class Game {
           c.play('gather', 0.7, () => {
             if (pl.crop || !this.inv.remove(seed, 1)) return;
             this.farming.plant(pl, SEED_CROP[seed]);
+            this.progress.planted = (this.progress.planted || 0) + 1;
+            this.checkQuest();
             this.fx.burst('dust', new THREE.Vector3(pl.x, pl.y + 0.2, pl.z), 10);
             this.audio.rustle();
             this.ui.toast(seed, 'Piantato! Torna quando è maturo.');
@@ -557,6 +632,7 @@ export class Game {
             const at = new THREE.Vector3(pl.x, pl.y + 0.6, pl.z);
             for (const [id, n] of Object.entries(out)) this.give(id, n, false, at);
             this.progress.harvested = (this.progress.harvested || 0) + 1;
+            this.checkQuest();
             this.fx.burst('grass', at, 14);
             this.audio.rustle();
             this.save();
@@ -594,7 +670,7 @@ export class Game {
 
   sleep(bed) {
     const night = this.sky.isNight() || this.sky.hours > 18.5 || this.sky.hours < 5;
-    this.respawn = { x: bed.x, z: bed.z };
+    this.respawn = { x: bed.x, z: bed.z, bed: true };
     this.progress.slept++;
     if (!night) {
       this.ui.center('Riposato', 'Punto di rinascita impostato. Dormi qui di notte per arrivare al mattino.', 2800);
@@ -631,6 +707,70 @@ export class Game {
     }, 1600);
   }
 
+  // ---------- demolition: refund half the cost (placed items come back whole) ----------
+  setDemolish(on) {
+    this.building.demolishMode = on;
+    if (this.building.ghost) this.building.ghost.visible = !on;
+    this.demoBox.visible = false;
+    this.ui.setDemolish?.(on);
+    if (on) this.ui.center('Smonta', 'Mira una costruzione · tasto azione per smontarla', 1800);
+  }
+  tryDemolish() {
+    const t = this.building.pickBuilt(this.player, this.rig.yaw);
+    if (!t) { this.ui.toast(null, 'Nessuna costruzione da smontare qui', true); this.audio.error(); return; }
+    if (t.blocked) { this.ui.toast(null, t.blocked, true); this.audio.error(); return; }
+    const type = this.building.demolish(t);
+    const refund = FREE_PLACE[type] ? { [type]: 1 } : Object.fromEntries(Object.entries(PIECES[type === 'edge' ? 'wall' : type]?.cost || {}).map(([k, n]) => [k, Math.max(1, Math.floor(n / 2))]));
+    const at = t.obj ? t.obj.position.clone().add(new THREE.Vector3(0, 0.8, 0)) : this.player.pos.clone();
+    for (const [id, n] of Object.entries(refund)) this.give(id, n, false, at);
+    this.audio.chop();
+    this.rig.shake(0.03, 0.12);
+    this.player.char.play('build', 0.5);
+    this.syncPlacedCounts?.();
+    this.emit('unbuild', { kind: t.kind, key: t.key, x: t.ref.x, z: t.ref.z });
+    this.save();
+  }
+
+  updateViewModel(dt) {
+    const vm = this.viewModel;
+    if (!vm.visible || !vm.children.length) return;
+    const P = this.player, A = P.char.action;
+    this.vmBob = (this.vmBob || 0) + dt * P.speed * 1.9;
+    const bob = Math.min(1, P.speed / 4);
+    let swing = 0;
+    if (A && ['chop', 'mine', 'attack', 'gather', 'build'].includes(A.type)) { const k = Math.min(1, A.t / A.dur); swing = Math.sin(Math.min(1, k * 1.6) * Math.PI); }
+    vm.position.set(0.3 + Math.sin(this.vmBob) * 0.012 * bob, -0.36 + Math.abs(Math.cos(this.vmBob)) * 0.014 * bob - swing * 0.06, -0.55 - swing * 0.12);
+    vm.rotation.set(-swing * 1.1, 0, swing * 0.25);
+    vm.visible = !P.swimming && !this.dead;
+  }
+
+  // ---------- inventory helpers ----------
+  moveStack(from, i, to) {
+    const st = from.slots[i];
+    if (!st) return;
+    const left = to.add(st.id, st.n);
+    if (left === st.n) { this.ui.toast(null, 'Non c’è spazio', true); this.audio.error(); return; }
+    from.slots[i] = left > 0 ? { id: st.id, n: left } : null;
+    from.emit({ moved: true });
+    this.audio.click();
+  }
+  depositAll(store) {
+    for (let i = HOTBAR; i < this.inv.slots.length; i++) if (this.inv.slots[i]) this.moveStack(this.inv, i, store);
+    this.save();
+  }
+  // merge stacks and sort the backpack (hotbar slots stay where the player put them)
+  sortBag() {
+    const bag = this.inv.slots.slice(HOTBAR).filter(Boolean);
+    const tot = {};
+    for (const st of bag) tot[st.id] = (tot[st.id] || 0) + st.n;
+    const order = Object.keys(ITEMS);
+    const ids = Object.keys(tot).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    const out = [];
+    for (const id of ids) { let n = tot[id]; while (n > 0) { const k = Math.min(n, ITEMS[id].stack); out.push({ id, n: k }); n -= k; } }
+    for (let i = HOTBAR; i < this.inv.slots.length; i++) this.inv.slots[i] = out[i - HOTBAR] || null;
+    this.inv.emit({ moved: true });
+  }
+
   rawFood() { return Object.keys(COOKING).find((id) => this.inv.count(id) > 0) || null; }
   seedInBag() { return Object.keys(SEED_CROP).find((id) => this.inv.count(id) > 0) || null; }
 
@@ -639,15 +779,21 @@ export class Game {
     this.stats.health = clamp(this.stats.health - dmg, 0, 100);
     this.audio.hurt();
     this.rig.shake(0.12, 0.3);
+    this.ui.hurtFlash();
     if (!this._hurtMsg || this.time - this._hurtMsg > 6) { this._hurtMsg = this.time; this.ui.toast(null, `⚠️ ${from?.label || 'Qualcosa'} ti attacca!`, true); }
     if (this.stats.health <= 0) this.die();
   }
 
   tryPlace() {
     const B = this.building;
+    if (B.demolishMode) { this.tryDemolish(); return; }
     const t = B.target;
     if (!t) return;
     const piece = B.piece;
+    if (PIECES[piece] && !tierUnlocked(PIECES[piece].tier, this.progress)) {
+      const tier = TIERS.find((x) => x.id === PIECES[piece].tier);
+      this.ui.toast(null, `Bloccato · ${tier.how}`, true); this.audio.error(); return;
+    }
     const isItem = !!FREE_PLACE[piece];
     const cost = isItem ? { [piece]: 1 } : PIECES[piece].cost;
     if (!this.inv.has(cost)) {
@@ -693,7 +839,7 @@ export class Game {
   currentQuest() {
     if (this.questIndex >= QUESTS.length) return FREE_PLAY(this.progress);
     const q = QUESTS[this.questIndex];
-    return { title: q.title, lines: q.lines(this.progress), hint: q.hint };
+    return { title: q.title, lines: q.lines(this.progress), hint: q.hint, goal: q.goal };
   }
 
   checkQuest() {
@@ -746,7 +892,11 @@ export class Game {
     setTimeout(() => {
       const r = this.respawn;
       this.player.teleport(r.x + 1, r.z + 1);
-      this.stats = { health: 60, water: 55, food: 55 };
+      // prototype-friendly: keep everything, just wake up rested enough to carry on
+      this.stats = { health: 70, water: Math.max(this.stats.water, 55), food: Math.max(this.stats.food, 55) };
+      for (const a of this.wildlife.list) if (a.state === 'chase') a.state = 'return';
+      this.progress.deaths = (this.progress.deaths || 0) + 1;
+      setTimeout(() => this.ui.center('Ti risvegli', r.bed ? 'Al tuo giaciglio. Il tuo zaino è intatto.' : 'Sulla spiaggia. Il tuo zaino è intatto.', 2600), 300);
       this.sky.time = Math.max(this.sky.time, 0.27);
       fade.classList.remove('on');
       this.player.frozen = false;
@@ -759,7 +909,7 @@ export class Game {
     if (!this.started || this.noSave) return;
     if (this.mode === 'guest') {
       try {
-        localStorage.setItem(GUEST_KEY, JSON.stringify({ v: 1, stats: this.stats, progress: this.progress, questIndex: this.questIndex, inv: this.inv.toJSON(), selected: this.selected }));
+        localStorage.setItem(GUEST_KEY, JSON.stringify({ v: 1, stats: this.stats, progress: this.progress, questIndex: this.questIndex, questId: QUESTS[this.questIndex]?.id || 'done', inv: this.inv.toJSON(), selected: this.selected }));
       } catch { /* storage unavailable */ }
       return;
     }
@@ -767,7 +917,7 @@ export class Game {
       const depleted = [];
       this.nature.all.forEach((r, i) => { if (!r.alive) depleted.push([i, Math.max(0, (r.respawnAt || 0) - this.time)]); });
       const data = {
-        v: SAVE_VERSION, savedAt: Date.now(), stats: this.stats, progress: this.progress, questIndex: this.questIndex, inv: this.inv.toJSON(), selected: this.selected,
+        v: SAVE_VERSION, savedAt: Date.now(), stats: this.stats, progress: this.progress, questIndex: this.questIndex, questId: QUESTS[this.questIndex]?.id || 'done', inv: this.inv.toJSON(), selected: this.selected,
         time: this.sky.time, day: this.sky.day, player: { x: this.player.pos.x, z: this.player.pos.z, f: this.player.facing },
         building: this.building.toJSON(), respawn: this.respawn, depleted,
       };
@@ -785,13 +935,25 @@ export class Game {
   toggleSetting(k) {
     const s = this.settings;
     if (k === 'quality') s.quality = s.quality === 'high' ? 'low' : 'high';
+    else if (k === 'view') s.view = s.view === 'tp' ? 'fp' : 'tp';
     else s[k] = !s[k];
     try { localStorage.setItem('ourisland-settings', JSON.stringify(s)); } catch { /* ignore */ }
     this.applySettings();
   }
 
+  // first person hides the local body from the main camera (layer 2) but keeps its shadow
+  applyView() {
+    const fp = this.settings.view !== 'tp';
+    this.rig.firstPerson = fp;
+    this.player.char.root.traverse((o) => { o.layers.set(2); });
+    if (fp) this.camera.layers.disable(2); else this.camera.layers.enable(2);
+    this.viewModel.visible = fp;
+    document.body.classList.toggle('fp', fp);
+  }
+
   applySettings() {
     const s = this.settings;
+    this.applyView();
     this.audio.sfxOn = s.sfx; this.audio.musicOn = s.music;
     this.rig.autoFollow = s.follow;
     const high = s.quality === 'high';
@@ -815,6 +977,7 @@ export class Game {
     P.char = ch;
     this._heldId = undefined;
     this.refreshHeld();
+    this.applyView();
   }
 
   emit(type, data) { this.coop?.event(type, data); }
@@ -833,6 +996,12 @@ export class Game {
     return this.coop;
   }
 
+  questFromSave(d) {
+    const id = d.questId || LEGACY_ORDER[d.questIndex ?? 0] || 'done';
+    const i = QUESTS.findIndex((q) => q.id === id);
+    return i >= 0 ? i : QUESTS.length;
+  }
+
   hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } }
   clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ } }
 
@@ -845,7 +1014,7 @@ export class Game {
       this.progress = Object.assign(this.progress, d.progress);
       this.progress.placed = Object.assign({ ...PLACED0 }, d.progress.placed);
       this.progress.killed = this.progress.killed || {};
-      this.questIndex = d.questIndex || 0;
+      this.questIndex = this.questFromSave(d);
       this.inv.load(d.inv || []);
       this.selected = d.selected ?? -1;
       this.loaded = true;
@@ -855,12 +1024,15 @@ export class Game {
     this.progress = Object.assign(this.progress, d.progress);
     this.progress.placed = Object.assign({ ...PLACED0 }, d.progress.placed);
       this.progress.killed = this.progress.killed || {};
-    this.questIndex = d.questIndex || 0;
+    this.questIndex = this.questFromSave(d);
     this.inv.load(d.inv || []);
     this.selected = d.selected ?? -1;
     this.sky.time = d.time ?? 0.33; this.sky.day = d.day || 1;
     this.building.load(d.building);
     for (const p of this.farming.plots()) this.farming.refresh(p);
+    for (const k of ['caches', 'blueprints', 'killed']) this.progress[k] = this.progress[k] || {};
+    this.caches.load(Object.keys(this.progress.caches));
+    this.syncPlacedCounts();
     this.respawn = d.respawn || this.respawn;
     for (const [i, rem] of d.depleted || []) {
       const r = this.nature.all[i];
@@ -913,6 +1085,7 @@ export class Game {
     this.pond.material.uniforms.uTime.value += dt;
     this.nature.update(dt, this.camera.position, this.time);
     this.crabs.update(dt, P, this.time);
+    this.wildlife.onSound = (a, kind) => { if (a.id === 'boar') this.audio.grunt(); else if (kind !== 'aggro') this.audio.cluck(); };
     this.wildlife.update(dt, P, this.time, (a, dmg) => this.hurtPlayer(dmg, a));
     if (this.started) { this.progress.playTime = (this.progress.playTime || 0) + dt; this.farming.update(dt); }
     this.birds.update(dt, this.sky.night);
@@ -934,21 +1107,40 @@ export class Game {
     // building ghost
     if (this.building.active) {
       const B = this.building;
-      const cost = FREE_PLACE[B.piece] ? { [B.piece]: 1 } : PIECES[B.piece].cost;
-      B.update(dt, P, this.rig.yaw, this.inv.has(cost));
-      this.ui.setAction({ label: 'Posiziona', icon: 'hammer', ready: B.target && B.target.ok && this.inv.has(cost) });
-      this.ui.setTarget(null);
+      if (B.demolishMode) {
+        const t = B.pickBuilt(P, this.rig.yaw);
+        if (t && t.obj) { this.demoBox.setFromObject(t.obj); this.demoBox.material.color.set(t.blocked ? 0xffc040 : 0xff6a50); }
+        this.demoBox.visible = !!(t && t.obj);
+        this.ui.setAction({ label: 'Smonta', icon: 'hammer', ready: !!t && !t.blocked });
+        this.ui.setTarget(t ? (t.blocked || (FREE_PLACE[t.type] ? ITEMS[t.type].name : PIECES[t.type]?.name || 'Costruzione')) : null);
+      } else {
+        const cost = FREE_PLACE[B.piece] ? { [B.piece]: 1 } : PIECES[B.piece].cost;
+        const locked = PIECES[B.piece] && !tierUnlocked(PIECES[B.piece].tier, this.progress);
+        B.update(dt, P, this.rig.yaw, this.inv.has(cost) && !locked);
+        this.ui.setAction({ label: locked ? 'Bloccato' : 'Posiziona', icon: 'hammer', ready: B.target && B.target.ok && this.inv.has(cost) && !locked });
+        this.ui.setTarget(B.target && !B.target.ok ? 'Posizione non valida' : null);
+      }
     } else {
       // interaction target
       this.target = this.findTarget();
       const d = this.describe(this.target);
       this.ui.setAction(d);
       this.ui.setTarget(this.target ? d.name : null, d.hp);
+      const tg = this.target && this.target.o;
+      const rm = this.ring.material;
+      if (tg && d.ready) {
+        const r = Math.max(0.45, Math.min(1.6, (tg.r || 0.5) + 0.25));
+        this.ring.position.set(tg.x, (tg.y ?? P.pos.y) + 0.04, tg.z);
+        this.ring.scale.setScalar(r * (1 + Math.sin(this.time * 4) * 0.03));
+        rm.opacity += (0.32 - rm.opacity) * Math.min(1, dt * 8);
+      } else rm.opacity += (0 - rm.opacity) * Math.min(1, dt * 8);
+      this.ring.visible = rm.opacity > 0.01;
       this.actionCooldown -= dt;
       if (intent.action && this.actionCooldown <= 0 && !P.char.busy) this.doAction();
     }
 
     this.updateSurvival(dt);
+    this.updateViewModel(dt);
     if (!this.progress.reachedPeak && P.pos.y > 40) { this.progress.reachedPeak = true; this.ui.center('Che vista!', 'Sei salito in alto tra i picchi', 2500); }
 
     // HUD
@@ -974,7 +1166,7 @@ export class Game {
       this.ui.setClock(this.sky.hours, this.sky.day);
     }
     // ambience
-    this.audio.update(dt, { coastDist: this.terrain.coastDist(P.pos.x, P.pos.z), night: this.sky.night });
+    this.audio.update(dt, { coastDist: this.terrain.coastDist(P.pos.x, P.pos.z), night: this.sky.night, altitude: P.pos.y, underCover: this.building.isSheltered(P.pos.x, P.pos.z) });
     // night warning
     const nightNow = this.sky.night > 0.5;
     if (nightNow && !this._wasNight) this.ui.toast(null, '🌙 Scende la notte. Resta vicino al fuoco o dormi.');
@@ -994,6 +1186,12 @@ export class Game {
       const near = this.nature.query(P.pos.x, P.pos.z, 18).filter((r) => r.alive && r.kind === want).sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z)).slice(0, 3);
       for (const r of near) this.fx.sparkle(new THREE.Vector3(r.x, r.y + 0.2, r.z), 3);
     }
+    // unopened caches glint now and then when you're close enough to notice
+    this.glintT = (this.glintT || 0) - dt;
+    if (this.glintT <= 0) {
+      this.glintT = 2.2;
+      for (const c of this.caches.list) if (!c.opened && Math.hypot(c.x - P.pos.x, c.z - P.pos.z) < 28) this.fx.sparkle(new THREE.Vector3(c.x, c.y + 0.75, c.z), 3, 0xffe6a8);
+    }
     // autosave
     this.saveT = (this.saveT || 0) + dt;
     if (this.saveT > 20) { this.saveT = 0; this.save(); }
@@ -1004,6 +1202,9 @@ export class Game {
     const q = QUESTS[this.questIndex];
     if (!q) return null;
     if (q.id === 'axe') return 'axe';
+    if (q.id === 'spear') return 'spear';
+    if (q.id === 'chest') return this.inv.count('rope') >= 1 ? 'chest' : 'rope';
+    if (q.id === 'farm') return 'farm_plot';
     if (q.id === 'campfire') return 'campfire';
     if (q.id === 'bed') return this.inv.count('rope') >= 2 ? 'bed' : 'rope';
     if (q.id === 'foundation' || q.id === 'walls') return 'rope';
@@ -1026,7 +1227,7 @@ export class Game {
       return best && { x: best.x, y: best.y + 1.2, z: best.z };
     };
     const source = (id) => {
-      if (id === 'wood' || id === 'leaf') return inv.count('axe') ? nearest((o) => o.kind === 'palm') : nearest((o) => o.kind === 'pickup' && o.item === 'wood');
+      if (id === 'wood' || id === 'leaf') return this.hasTool('axe') ? nearest((o) => o.kind === 'palm') : nearest((o) => o.kind === 'pickup' && o.item === 'wood');
       if (id === 'stick') return nearest((o) => o.kind === 'pickup' && o.item === 'stick');
       if (id === 'stone') return nearest((o) => o.kind === 'pickup' && o.item === 'stone') || nearest((o) => o.kind === 'node');
       if (id === 'fiber' || id === 'rope') return nearest((o) => o.kind === 'fiber');
@@ -1046,11 +1247,20 @@ export class Game {
       case 'gather': return { src: nearest((o) => o.kind === 'pickup' && ((pr.col.stick || 0) < 3 ? o.item === 'stick' : o.item === 'stone'), 40) };
       case 'fiber': return { src: nearest((o) => o.kind === 'fiber') };
       case 'axe': return missing(R('axe')) || { ui: 'bag' };
-      case 'chop': return inv.count('axe') ? { src: nearest((o) => o.kind === 'palm', 40) } : {};
+      case 'chop': return this.hasTool('axe') ? { src: nearest((o) => o.kind === 'palm', 40) } : {};
       case 'campfire':
         if (!(pr.crafted.campfire || inv.count('campfire'))) return missing(R('campfire')) || { ui: 'bag' };
         return { ui: 'hotbar' };
       case 'drink': { const p = this.terrain.pond; return { src: { x: p.x, y: p.y + 2, z: p.z } }; }
+      case 'food': return inv.count('berries') || inv.count('coconut') || inv.count('crab_cooked') || inv.count('meat_cooked') ? { ui: 'hotbar' } : { src: nearest((o) => o.kind === 'berry') || nearest((o) => o.kind === 'pickup' && o.item === 'coconut') };
+      case 'spear': return missing(R('spear')) || { ui: 'bag' };
+      case 'chest':
+        if (!(pr.crafted.chest || inv.count('chest'))) return missing(R('chest')) || { ui: 'bag' };
+        return { ui: 'hotbar' };
+      case 'farm':
+        if (!pr.placed.farm_plot) { if (!(pr.crafted.farm_plot || inv.count('farm_plot'))) return missing(R('farm_plot')) || { ui: 'bag' }; return { ui: 'hotbar' }; }
+        if (!pr.planted && !inv.count('fiber_sprout')) return { src: nearest((o) => o.kind === 'fiber') };
+        { const pl = this.farming.plots()[0]; return pl ? { src: { x: pl.x, y: pl.y + 1.2, z: pl.z } } : {}; }
       case 'foundation': return missing(PIECES.foundation.cost) || { ui: 'build' };
       case 'walls': return missing(PIECES.wall.cost) || { ui: 'build' };
       case 'roof': return missing(PIECES.roof.cost) || { ui: 'build' };
@@ -1085,6 +1295,7 @@ export class Game {
 
   start() {
     this.started = true;
+    document.body.classList.add('playing');
     this.intro = this.titleYaw !== undefined ? { t: 0, pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() } : null;
     this.audio.unlock();
     this.rig.target.copy(this.player.pos);

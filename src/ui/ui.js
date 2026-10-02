@@ -1,5 +1,5 @@
 // DOM HUD, hotbar, inventory/crafting panel, build bar, minimap.
-import { ITEMS, RECIPES, PIECES } from '../game/items.js';
+import { ITEMS, RECIPES, PIECES, TIERS, tierUnlocked } from '../game/items.js';
 import { HOTBAR } from '../game/inventory.js';
 import { SVG } from './icons.js';
 import { WORLD_SIZE } from '../world/terrain.js';
@@ -52,6 +52,8 @@ export class UI {
     press($('btn-bag'), () => this.openPanel(this._attn === 'bag' ? 'craft' : 'inv'));
     press($('bb-rotate'), () => g.building.rotate());
     press($('bb-cancel'), () => g.toggleBuild(false));
+    press($('bb-demolish'), () => g.setDemolish(!g.building.demolishMode));
+    $('inv-sort').addEventListener('click', () => { g.sortBag(); g.audio.click(); this.refreshPanel(); });
     document.querySelectorAll('#tabs .tab[data-tab]').forEach((b) => b.addEventListener('click', () => this.openPanel(b.dataset.tab)));
     $('panel-close').addEventListener('click', () => this.closePanel());
     this.panel.addEventListener('pointerdown', (e) => { if (e.target === this.panel) this.closePanel(); });
@@ -81,7 +83,7 @@ export class UI {
     this.quest.style.opacity = 1;
     this.quest.innerHTML = `<div class="qt">${q.title}</div>` +
       q.lines.map((l) => `<div class="qline ${l.done ? 'done' : ''}"><span class="ck">${l.done ? '✔' : '◇'}</span><span>${l.text}</span></div>`).join('') +
-      (q.hint ? `<div class="qhint">${q.hint}</div>` : '');
+      (q.hint ? `<div class="qhint">${q.hint}</div>` : '') + (q.goal ? `<div class="qgoal">→ ${q.goal}</div>` : '');
     if (flash) { this.quest.classList.remove('flash'); void this.quest.offsetWidth; this.quest.classList.add('flash'); }
   }
 
@@ -293,6 +295,7 @@ export class UI {
   closePanel() {
     this.panel.classList.add('hidden');
     this.g.panelOpen = false;
+    if (this.tab === 'chest') { this.g.openChest = null; this.g.save(); }
     this.selSlot = -1;
   }
   get isOpen() { return !this.panel.classList.contains('hidden'); }
@@ -303,11 +306,14 @@ export class UI {
     // inventory is always visible on wide screens next to crafting; on the inv tab show only inventory
     const wide = window.innerWidth > 900;
     const settings = this.tab === 'settings';
-    invBox.classList.toggle('hidden', settings || (this.tab !== 'inv' && !wide));
+    const chest = this.tab === 'chest' && this.g.openChest;
+    this.panel.classList.toggle('chestmode', !!chest);
+    invBox.classList.toggle('hidden', settings || (this.tab !== 'inv' && !wide && !chest));
     craftBox.classList.toggle('hidden', this.tab === 'inv' || settings);
     $('settings-box').classList.toggle('hidden', !settings);
     if (settings) { this._renderSettings(); return; }
     this._renderInv();
+    if (chest) this._renderChest();
     if (this.tab === 'craft') this._renderCraft();
     if (this.tab === 'build') this._renderBuild();
   }
@@ -321,6 +327,7 @@ export class UI {
       d.className = 'slot' + (i < HOTBAR ? ' hb' : '') + (i === this.selSlot ? ' sel' : '');
       d.innerHTML = (i < HOTBAR ? `<span class="k">${i + 1}</span>` : '') + (s ? `<img src="${this.icons.item(s.id)}">${s.n > 1 ? `<span class="n">${s.n}</span>` : ''}` : '');
       d.addEventListener('click', () => {
+        if (this.tab === 'chest' && this.g.openChest && s) { this.g.moveStack(inv, i, this.g.openChest.store); this.refreshPanel(); return; }
         if (this.selSlot >= 0 && this.selSlot !== i) { inv.swap(this.selSlot, i); this.selSlot = -1; }
         else this.selSlot = this.selSlot === i ? -1 : (s ? i : -1);
         this.refreshPanel();
@@ -341,14 +348,17 @@ export class UI {
         this.closePanel();
         this.g.useSlot(idx);
       }));
+    } else if (this.tab === 'chest') {
+      det.innerHTML = `<b>Zaino</b>Tocca un oggetto per depositarlo nella cassa.`;
     } else {
       det.innerHTML = `<b>Zaino</b>Gli spazi 1–${HOTBAR} sono la barra rapida. Tocca un oggetto per i dettagli, poi un altro spazio per spostarlo.`;
     }
+    $('inv-sort').classList.toggle('hidden', this.tab === 'chest');
   }
 
   _renderSettings() {
     const s = this.g.settings;
-    const label = { sfx: s.sfx ? 'Sì' : 'No', music: s.music ? 'Sì' : 'No', quality: s.quality === 'high' ? 'Alta' : 'Bassa', follow: s.follow ? 'Sì' : 'No' };
+    const label = { sfx: s.sfx ? 'Sì' : 'No', music: s.music ? 'Sì' : 'No', quality: s.quality === 'high' ? 'Alta' : 'Bassa', follow: s.follow ? 'Sì' : 'No', view: s.view === 'tp' ? 'Terza persona' : 'Prima persona' };
     document.querySelectorAll('[data-set]').forEach((b) => {
       const k = b.dataset.set;
       if (label[k]) b.textContent = label[k];
@@ -373,21 +383,34 @@ export class UI {
     $('craft-box').querySelector('h2').textContent = 'Crea';
     const list = $('craft-list');
     list.innerHTML = '';
+    const P = this.g.progress;
+    let lastTier = 0;
     RECIPES.forEach((r, i) => {
-      const can = this.g.inv.has(r.cost);
+      const tier = TIERS.find((t) => t.id === (r.tier || 1));
+      const open = tier.req(P);
+      if (tier.id !== lastTier) {
+        lastTier = tier.id;
+        const h = document.createElement('div');
+        h.className = 'tierhdr' + (open ? '' : ' locked');
+        h.textContent = `${tier.id} · ${tier.name}${open ? '' : ' 🔒'}`;
+        list.appendChild(h);
+      }
+      const can = open && this.g.inv.has(r.cost);
       const b = document.createElement('button');
-      b.className = 'citem' + (i === this.craftSel ? ' sel' : '') + (can ? ' can' : '');
+      b.className = 'citem' + (i === this.craftSel ? ' sel' : '') + (can ? ' can' : '') + (open ? '' : ' locked');
       b.innerHTML = `<img src="${this.icons.item(r.out)}"><span>${ITEMS[r.out].name}</span>`;
-      b.addEventListener('click', () => { this.craftSel = i; this.refreshPanel(); });
+      b.addEventListener('click', () => { this.craftSel = i; this.g.audio.click(); this.refreshPanel(); });
       list.appendChild(b);
     });
-    const r = RECIPES[this.craftSel];
+    const r = RECIPES[this.craftSel] || RECIPES[0];
     const it = ITEMS[r.out];
-    const can = this.g.inv.has(r.cost);
+    const tier = TIERS.find((t) => t.id === (r.tier || 1));
+    const open = tier.req(P);
+    const can = open && this.g.inv.has(r.cost);
     const det = $('craft-detail');
     det.innerHTML = `<b style="color:#f5ecd6;font-size:16px">${it.name}</b><span style="font-size:12px">${it.desc}</span>
-      <img class="big" src="${this.icons.item(r.out)}">${this._costHtml(r.cost)}
-      <button class="craft-btn" ${can ? '' : 'disabled'}>CREA</button>`;
+      <img class="big" src="${this.icons.item(r.out)}">${open ? this._costHtml(r.cost) : `<div class="set-note">🔒 Livello ${tier.id} · ${tier.name}<br>${tier.how}</div>`}
+      <button class="craft-btn" ${can ? '' : 'disabled'}>${open ? 'CREA' : 'BLOCCATO'}</button>`;
     det.querySelector('.craft-btn').addEventListener('click', () => { this.g.craft(r); this.refreshPanel(); });
   }
 
@@ -396,18 +419,21 @@ export class UI {
     const list = $('craft-list');
     list.innerHTML = '';
     for (const [id, p] of Object.entries(PIECES)) {
-      const can = this.g.inv.has(p.cost);
+      const open = tierUnlocked(p.tier, this.g.progress);
+      const can = open && this.g.inv.has(p.cost);
       const b = document.createElement('button');
-      b.className = 'citem' + (id === this.buildSel ? ' sel' : '') + (can ? ' can' : '');
+      b.className = 'citem' + (id === this.buildSel ? ' sel' : '') + (can ? ' can' : '') + (open ? '' : ' locked');
       b.innerHTML = `<img src="${this.g.pieceIcon(id)}"><span>${p.name}</span>`;
       b.addEventListener('click', () => { this.buildSel = id; this.refreshPanel(); });
       list.appendChild(b);
     }
     const p = PIECES[this.buildSel];
+    const tier = TIERS.find((t) => t.id === (p.tier || 1));
+    const open = tier.req(this.g.progress);
     const det = $('craft-detail');
     det.innerHTML = `<b style="color:#f5ecd6;font-size:16px">${p.name}</b><span style="font-size:12px">${p.desc}</span>
-      <img class="big" src="${this.g.pieceIcon(this.buildSel)}">${this._costHtml(p.cost)}
-      <button class="craft-btn">COSTRUISCI</button>`;
+      <img class="big" src="${this.g.pieceIcon(this.buildSel)}">${open ? this._costHtml(p.cost) : `<div class="set-note">🔒 Livello ${tier.id} · ${tier.name}<br>${tier.how}</div>`}
+      <button class="craft-btn" ${open ? '' : 'disabled'}>${open ? 'COSTRUISCI' : 'BLOCCATO'}</button>`;
     det.querySelector('.craft-btn').addEventListener('click', () => { this.closePanel(); this.g.toggleBuild(true, this.buildSel); });
   }
 
@@ -415,7 +441,8 @@ export class UI {
   showBuildBar(on, placing = null) {
     $('build-bar').classList.toggle('hidden', !on);
     $('build-pieces').classList.toggle('hidden', !!placing);
-    $('bb-rotate').classList.toggle('hidden', !!placing && placing !== ITEMS.bed.name);
+    $('bb-demolish').classList.toggle('hidden', !!placing);
+    this.setDemolish(false);
     this.hotbar.classList.toggle('hidden', on);
     $('btn-build').classList.toggle('on', on);
     if (on) this.renderBuildBar();
@@ -430,11 +457,45 @@ export class UI {
     for (const [id, p] of Object.entries(PIECES)) {
       const d = document.createElement('div');
       const can = this.g.inv.has(p.cost);
-      d.className = 'bpiece' + (id === cur ? ' sel' : '') + (can ? '' : ' no');
+      const open = tierUnlocked(p.tier, this.g.progress);
+      d.className = 'bpiece' + (id === cur ? ' sel' : '') + (can ? '' : ' no') + (open ? '' : ' locked');
       const cost = Object.entries(p.cost).map(([k, n]) => `${n} ${ITEMS[k].short || ITEMS[k].name}`).join(' · ');
       d.innerHTML = `<img src="${this.g.pieceIcon(id)}"><span>${cost}</span>`;
-      d.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.g.building.setPiece(id); this.bbKey = ''; this.renderBuildBar(); });
+      d.addEventListener('pointerdown', (e) => { e.stopPropagation(); if (this.g.building.demolishMode) this.g.setDemolish(false); this.g.building.setPiece(id); this.bbKey = ''; this.g.audio.click(); this.renderBuildBar(); });
       wrap.appendChild(d);
     }
+  }
+
+  setDemolish(on) { $('bb-demolish').classList.toggle('on', !!on); }
+
+  hurtFlash() {
+    const h = $('hurt');
+    h.classList.add('on');
+    clearTimeout(this._hurtT);
+    this._hurtT = setTimeout(() => h.classList.remove('on'), 140);
+  }
+
+  // storage container view: tap a stack to take it into the backpack
+  _renderChest() {
+    const box = $('craft-box');
+    box.classList.remove('hidden');
+    const pl = this.g.openChest;
+    box.querySelector('h2').textContent = ITEMS[pl.type].name;
+    const list = $('craft-list'), det = $('craft-detail');
+    list.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    pl.store.slots.forEach((s, i) => {
+      const d = document.createElement('div');
+      d.className = 'slot chest';
+      d.innerHTML = s ? `<img src="${this.icons.item(s.id)}">${s.n > 1 ? `<span class="n">${s.n}</span>` : ''}` : '';
+      d.addEventListener('click', () => { if (s) { this.g.moveStack(pl.store, i, this.g.inv); this.refreshPanel(); } });
+      grid.appendChild(d);
+    });
+    list.appendChild(grid);
+    const used = pl.store.slots.filter(Boolean).length;
+    det.innerHTML = `<b>${used}/${pl.store.slots.length} spazi usati</b><span style="font-size:12px">Tocca un oggetto nella cassa per riprenderlo, o nello zaino per depositarlo.</span>
+      <button class="craft-btn" id="chest-all">DEPOSITA TUTTO</button>`;
+    det.querySelector('#chest-all').addEventListener('click', () => { this.g.depositAll(pl.store); this.refreshPanel(); });
   }
 }

@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { materials } from '../world/materials.js';
-import { PIECES, FREE_PLACE, campfireGeo, bedGeo, farmPlotGeo, itemMaterial } from './items.js';
+import { PIECES, FREE_PLACE, STORAGE, campfireGeo, bedGeo, farmPlotGeo, chestGeo, itemMaterial } from './items.js';
+import { Inventory } from './inventory.js';
 import { mulberry32 } from '../util/noise.js';
 
 export const G = 3;          // grid cell size
@@ -140,6 +141,8 @@ export function pieceModel(type) {
   else if (type === 'campfire') m = [{ geo: campfireGeo(1), mat: itemMaterial }];
   else if (type === 'bed') m = [{ geo: bedGeo(), mat: itemMaterial }];
   else if (type === 'farm_plot') m = [{ geo: farmPlotGeo(1), mat: itemMaterial }];
+  else if (type === 'chest') m = [{ geo: chestGeo(0.9, 0.6, 0.6), mat: itemMaterial }];
+  else if (type === 'big_chest') m = [{ geo: chestGeo(1.3, 0.75, 0.75), mat: itemMaterial }];
   else m = wallModel(type);
   return (modelCache[type] = m);
 }
@@ -317,7 +320,8 @@ export class Building {
       obj.position.set((t.i + 0.5) * G, cell.level, (t.j + 0.5) * G);
       cell.obj = obj;
       this.cells.set(k, cell);
-      this.world.platforms.push({ minX: t.i * G - 0.05, maxX: (t.i + 1) * G + 0.05, minZ: t.j * G - 0.05, maxZ: (t.j + 1) * G + 0.05, top: cell.level });
+      cell.platform = { minX: t.i * G - 0.05, maxX: (t.i + 1) * G + 0.05, minZ: t.j * G - 0.05, maxZ: (t.j + 1) * G + 0.05, top: cell.level };
+      this.world.platforms.push(cell.platform);
     } else if (type === 'roof') {
       const cell = this.cells.get(this.key(t.i, t.j));
       if (!cell) return null;
@@ -332,6 +336,8 @@ export class Building {
       obj.rotation.y = t.rot;
       const pl = { type, x: t.x, y: t.y, z: t.z, rot: t.rot, obj };
       if (type === 'farm_plot') pl.crop = t.crop ? { ...t.crop } : null;
+      if (STORAGE[type]) { pl.store = new Inventory(STORAGE[type]); if (t.store) pl.store.load(t.store); }
+      if (type === 'chest' || type === 'big_chest') { pl.collider = { x: t.x, z: t.z, r: type === 'chest' ? 0.5 : 0.7, h: t.y + 0.8 }; this.world.circles.push(pl.collider); }
       if (type === 'campfire') {
         pl.fire = this.fx.addFire(new THREE.Vector3(t.x, t.y + 0.1, t.z), 1);
         pl.collider = { x: t.x, z: t.z, r: 0.55, h: t.y + 0.5 };
@@ -346,7 +352,8 @@ export class Building {
       const mz = t.d === 'x' ? t.j * G : (t.j + 0.5) * G;
       obj.position.set(mx, lvl, mz);
       obj.rotation.y = t.d === 'x' ? 0 : Math.PI / 2;
-      this.edges.set(ek, { type, obj, i: t.i, j: t.j, d: t.d, level: lvl });
+      const edge = { type, obj, i: t.i, j: t.j, d: t.d, level: lvl, cols: [] };
+      this.edges.set(ek, edge);
       // colliders
       const ax = t.d === 'x' ? t.i * G : t.i * G, az = t.d === 'x' ? t.j * G : t.j * G;
       const bx = t.d === 'x' ? (t.i + 1) * G : t.i * G, bz = t.d === 'x' ? t.j * G : (t.j + 1) * G;
@@ -354,11 +361,11 @@ export class Building {
       if (type === 'doorway') {
         const ux = (bx - ax) / G, uz = (bz - az) / G;
         const g1 = G / 2 - 0.62;
-        this.world.walls.push({ ...W, ax, az, bx: ax + ux * g1, bz: az + uz * g1 });
-        this.world.walls.push({ ...W, ax: bx - ux * g1, az: bz - uz * g1, bx, bz });
+        edge.cols.push({ ...W, ax, az, bx: ax + ux * g1, bz: az + uz * g1 }, { ...W, ax: bx - ux * g1, az: bz - uz * g1, bx, bz });
       } else {
-        this.world.walls.push({ ...W, ax, az, bx, bz });
+        edge.cols.push({ ...W, ax, az, bx, bz });
       }
+      this.world.walls.push(...edge.cols);
     }
     this.scene.add(obj);
     if (animate) {
@@ -383,6 +390,65 @@ export class Building {
     }
   }
 
+  // ---------- demolition ----------
+  // What the player is pointing at (within reach, in front): { kind: 'edge'|'roof'|'foundation'|'free', ref, obj, type, blocked? }
+  pickBuilt(player, camYaw) {
+    const fx = -Math.sin(camYaw), fz = -Math.cos(camYaw), P = player.pos;
+    let best = null, bs = 1e9;
+    const consider = (x, y, z, rec) => {
+      const dx = x - P.x, dz = z - P.z, d = Math.hypot(dx, dz);
+      if (d > 4.5 || Math.abs(y - P.y) > 4) return;
+      const dot = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
+      if (dot < 0.35) return;
+      const sc = d - dot * 1.5 + rec.bias;
+      if (sc < bs) { bs = sc; best = rec; }
+    };
+    for (const p of this.placeables) consider(p.x, p.y, p.z, { kind: 'free', ref: p, obj: p.obj, type: p.type, bias: -0.6 });
+    for (const [k, e] of this.edges) consider(e.obj.position.x, e.level + 1, e.obj.position.z, { kind: 'edge', ref: e, key: k, obj: e.obj, type: e.type, bias: 0 });
+    for (const [k, c] of this.cells) {
+      const [i, j] = k.split(',').map(Number), cx = (i + 0.5) * G, cz = (j + 0.5) * G;
+      if (c.roof) consider(cx, c.level + 2, cz, { kind: 'roof', ref: c, key: k, obj: c.roofObj, type: 'roof', bias: 0.4 });
+      if (c.foundation) consider(cx, c.level, cz, { kind: 'foundation', ref: c, key: k, obj: c.obj, type: 'foundation', bias: 0.9 });
+    }
+    if (!best) return null;
+    if (best.kind === 'foundation') {
+      const [i, j] = best.key.split(',').map(Number);
+      const attached = best.ref.roof || [`${i},${j},x`, `${i},${j + 1},x`, `${i},${j},z`, `${i + 1},${j},z`].some((ek) => this.edges.has(ek) && !this._edgeHasOtherFloor(ek, i, j));
+      if (attached) best.blocked = 'Prima smonta pareti e tetto';
+    }
+    if (best.kind === 'free' && best.ref.store && best.ref.store.slots.some(Boolean)) best.blocked = 'Svuota prima la cassa';
+    return best;
+  }
+  _edgeHasOtherFloor(ek, i, j) {
+    const [ei, ej, d] = ek.split(',');
+    const other = d === 'x' ? (Number(ej) === j ? [i, j - 1] : [i, j]) : (Number(ei) === i ? [i - 1, j] : [i, j]);
+    return !!this.cells.get(this.key(other[0], other[1]))?.foundation;
+  }
+
+  // Removes a picked piece; returns its type (caller refunds resources)
+  demolish(t) {
+    const drop = (o) => { if (o) { this.scene.remove(o); this.fx.burst('dust', o.position.clone().add(new THREE.Vector3(0, 0.4, 0)), 14); } };
+    if (t.kind === 'free') {
+      const p = t.ref;
+      drop(p.obj);
+      if (p.fire) this.fx.removeFire(p.fire);
+      if (p.collider) { const i = this.world.circles.indexOf(p.collider); if (i >= 0) this.world.circles.splice(i, 1); }
+      this.placeables.splice(this.placeables.indexOf(p), 1);
+    } else if (t.kind === 'edge') {
+      drop(t.obj);
+      for (const c of t.ref.cols || []) { const i = this.world.walls.indexOf(c); if (i >= 0) this.world.walls.splice(i, 1); }
+      this.edges.delete(t.key);
+    } else if (t.kind === 'roof') {
+      drop(t.obj);
+      t.ref.roof = false; t.ref.roofObj = null;
+    } else if (t.kind === 'foundation') {
+      drop(t.obj);
+      const i = this.world.platforms.indexOf(t.ref.platform); if (i >= 0) this.world.platforms.splice(i, 1);
+      this.cells.delete(t.key);
+    }
+    return t.type;
+  }
+
   // shelter: a cell with foundation + roof + all 4 walls (at least one doorway)
   shelterCells() {
     const out = [];
@@ -404,14 +470,16 @@ export class Building {
     let foundation = 0, walls = 0, doorway = 0, roof = 0;
     for (const c of this.cells.values()) { if (c.foundation) foundation++; if (c.roof) roof++; }
     for (const e of this.edges.values()) { walls++; if (e.type === 'doorway') doorway++; }
-    return { foundation, walls, doorway, roof, campfire: this.placeables.filter((p) => p.type === 'campfire').length, bed: this.placeables.filter((p) => p.type === 'bed').length };
+    const out = { foundation, walls, doorway, roof };
+    for (const k of Object.keys(FREE_PLACE)) out[k] = this.placeables.filter((p) => p.type === k).length;
+    return out;
   }
 
   toJSON() {
     const cells = [];
     for (const [k, c] of this.cells) { const [i, j] = k.split(',').map(Number); cells.push({ i, j, level: c.level, roof: !!c.roof, roofRot: c.roofRot || 0 }); }
     const edges = [...this.edges.values()].map((e) => ({ i: e.i, j: e.j, d: e.d, type: e.type, level: e.level }));
-    const placeables = this.placeables.map((p) => ({ type: p.type, x: p.x, y: p.y, z: p.z, rot: p.rot, ...(p.crop !== undefined ? { crop: p.crop } : {}) }));
+    const placeables = this.placeables.map((p) => ({ type: p.type, x: p.x, y: p.y, z: p.z, rot: p.rot, ...(p.crop !== undefined ? { crop: p.crop } : {}), ...(p.store ? { store: p.store.toJSON() } : {}) }));
     return { cells, edges, placeables };
   }
 

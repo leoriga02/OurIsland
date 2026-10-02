@@ -4,6 +4,19 @@ A mobile-first, third-person tropical survival prototype built with Three.js. Th
 
 **Early-game loop:** wash ashore → gather sticks, stones and fiber → craft a stone axe → fell palms → make a campfire → find fresh water → build a raised wooden hut (foundation, walls, doorway, thatch roof) → craft a leaf bed and sleep through the night.
 
+**Progression:** short Italian objectives that say what to do next and what each step unlocks: gather → first axe → water and food → spear → campfire → shelter → storage chest → first fiber crop → bed → explore. Crafting is split into 5 tiers:
+1. *Sopravvivenza*
+2. *Base*, after the first tree is felled
+3. *Coltivazione*, after the first shelter
+4. *Attrezzi migliori*, from a blueprint in the cave
+5. *Costruzione avanzata*, from a blueprint in the hidden cove
+
+Seven one-time supply caches sit at the island's landmarks.
+
+**View:** first person by default; Settings or the V key switches to third person.
+
+**Building:** the placement preview is green or red, grid pieces snap, and objects can be rotated or cancelled. *Smonta* (or X) dismantles a piece for half its cost back; placed items come back whole.
+
 **Survival systems:**
 - **Farming:** wild fiber plants drop sprouts. Plant them in a crafted farm plot (Orto); they grow on played time and harvest into fiber plus new sprouts.
 - **Wildlife and combat:** boars and chickens appear once their models are added (see `assets/external/animals/`). Boars chase and attack within a limited range. Fight with the craftable spear (Lancia) or any tool; boars drop meat and hide, and meat can be cooked at a campfire.

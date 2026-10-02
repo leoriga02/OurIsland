@@ -38,6 +38,7 @@ export class Audio {
     const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 800; bp.Q.value = 0.6;
     const g2 = c.createGain(); g2.gain.value = 0.018;
     s2.connect(bp); bp.connect(g2); g2.connect(this.master); s2.start();
+    this.wind = g2;
     this.nextBird = 2;
     this.nextCricket = 0;
     // soft music bus with an echo
@@ -79,10 +80,13 @@ export class Audio {
     this.nextNote = [0.45, 0.9, 0.9, 1.35][Math.floor(Math.random() * 4)];
   }
 
-  update(dt, { coastDist = 0, night = 0, underCover = false } = {}) {
+  update(dt, { coastDist = 0, night = 0, underCover = false, altitude = 0 } = {}) {
     if (!this.ctx) return;
     const near = Math.max(0, 1 - Math.max(0, coastDist) / 70);
-    this.surf.gain.setTargetAtTime(this.sfxOn === false ? 0 : 0.03 + near * 0.11, this.ctx.currentTime, 0.5);
+    const off = this.sfxOn === false;
+    this.surf.gain.setTargetAtTime(off ? 0 : (0.03 + near * 0.11) * (underCover ? 0.6 : 1), this.ctx.currentTime, 0.5);
+    // wind picks up on the heights and dies down under a roof
+    this.wind?.gain.setTargetAtTime(off ? 0 : (0.014 + Math.min(1, Math.max(0, altitude - 12) / 40) * 0.05) * (underCover ? 0.4 : 1), this.ctx.currentTime, 1.2);
     this._music(dt, night);
     this.nextBird -= dt;
     if (this.nextBird < 0) {
@@ -135,6 +139,10 @@ export class Audio {
   step(surface) { this.hit(surface === 'sand' ? 1400 : 900, 0.07, 0.06, 0.8, 'lowpass'); }
   error() { this.tone(200, 0.15, 'square', 0.06, -60); }
   quest() { [659, 784, 988, 1318].forEach((f, i) => this.tone(f, 0.35, 'sine', 0.13, 0, i * 0.1)); }
+  chest() { this.tone(180, 0.12, 'triangle', 0.06, -40); setTimeout(() => this.tone(320, 0.08, 'triangle', 0.04, 60), 90); }
+  click() { this.tone(900, 0.04, 'sine', 0.025, -200); }
+  grunt() { this.tone(110, 0.28, 'sawtooth', 0.05, -50); setTimeout(() => this.tone(85, 0.2, 'sawtooth', 0.04, -30), 140); }
+  cluck() { this.tone(1100, 0.06, 'square', 0.02, -500); }
   hurt() { this.tone(220, 0.2, 'sawtooth', 0.08, -120); }
   bird() {
     if (!this.ctx) return;

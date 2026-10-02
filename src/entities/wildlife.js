@@ -135,7 +135,7 @@ export class Wildlife {
       let want = 0, face = a.dir;
       if (sp.hostile) {
         const fromHome = Math.hypot(a.x - a.home.x, a.z - a.home.z);
-        if (a.state !== 'chase' && a.state !== 'return' && d < sp.sense && playerOk) a.state = 'chase';
+        if (a.state !== 'chase' && a.state !== 'return' && d < sp.sense && playerOk) { a.state = 'chase'; if (d < 25) this.onSound?.(a, 'aggro'); }
         if (a.state === 'chase') {
           if (!playerOk || fromHome > sp.leash || d > sp.sense * 3) { a.state = 'return'; }
           else {
@@ -155,7 +155,7 @@ export class Wildlife {
           face = Math.atan2(a.home.x - a.x, a.home.z - a.z); want = sp.walk * 1.6;
           if (fromHome < 4) { a.state = 'idle'; a.t = 4; }
         }
-      } else if (d < sp.flee && playerOk) { a.state = 'flee'; a.t = 2; a.dir = Math.atan2(-dx, -dz); }
+      } else if (d < sp.flee && playerOk) { if (a.state !== 'flee') this.onSound?.(a, 'flee'); a.state = 'flee'; a.t = 2; a.dir = Math.atan2(-dx, -dz); }
       if (a.state === 'flee') { face = a.dir; want = sp.run; if (a.t <= 0) a.state = 'idle'; }
       if (a.state === 'idle' || a.state === 'wander') {
         if (a.t <= 0) {
