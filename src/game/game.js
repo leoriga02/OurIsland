@@ -15,10 +15,12 @@ import { Wildlife } from '../entities/wildlife.js';
 import { Birds } from '../entities/birds.js';
 import { Input } from '../input.js';
 import { Inventory, HOTBAR } from './inventory.js';
-import { ITEMS, RECIPES, PIECES, FREE_PLACE, WEAPON_DMG, COOKING, STORAGE, TIERS, BUFFS, STATIONS, tierUnlocked, itemMesh } from './items.js';
+import { ITEMS, RECIPES, PIECES, FREE_PLACE, WEAPON_DMG, COOKING, STORAGE, TIERS, BUFFS, STATIONS, MINERALS, DRYING, SMELT, tierUnlocked, itemMesh } from './items.js';
 import { Caches, BLUEPRINTS } from './caches.js';
 import { Base, COOP, COLLECTOR } from './base.js';
 import { Fishing } from './fishing.js';
+import { Cave } from './cave.js';
+import { RACK } from './base.js';
 import { Farming, CROPS, SEED_CROP } from './farming.js';
 import { Building, pieceObject } from './building.js';
 import { QUESTS, FREE_PLAY, LEGACY_ORDER, SELF_SUFFICIENCY } from './quests.js';
@@ -31,7 +33,7 @@ import { clamp } from '../util/noise.js';
 
 const SAVE_KEY = 'ourisland-save-v2'; // v2: Island 2.0 layout (v1 saves belong to the old island)
 // Save format version inside SAVE_KEY. Bump it and add a step to migrateSave() whenever the format changes.
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 function migrateSave(d) {
   if (!d || typeof d.v !== 'number') return null;
   if (d.v < 3) { d.progress = d.progress || {}; d.progress.playTime = d.progress.playTime || 0; d.v = 3; } // v3: play clock (crops), farm plots
@@ -40,12 +42,14 @@ function migrateSave(d) {
     d.questId = old ? old : 'done';
     d.v = 4;
   }
-  if (d.v < 5) { d.drift = d.drift || []; if (d.questId === 'done') d.questId = 'water'; d.v = 5; } // v5: coops, water collectors, drift crates, buffs (all optional fields)
+  if (d.v < 5) { d.drift = d.drift || []; if (d.questId === 'done') d.questId = 'water'; d.v = 5; }
+  if (d.v < 6) { if (d.questId === 'done') d.questId = 'cave'; d.v = 6; } // v6: cave, ore veins, furnace, drying rack // v5: coops, water collectors, drift crates, buffs (all optional fields)
   return d.v === SAVE_VERSION ? d : null;
 }
 const GUEST_KEY = 'ourisland-guest-v1'; // a guest keeps their own backpack & progress; the world belongs to the host
-const REACH = { coop: 2.4, water_collector: 1.7, pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0, farm_plot: 1.6, animal: 2.0, cache: 1.6, chest: 1.6, big_chest: 1.7 };
-const PLACED0 = { foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0, farm_plot: 0, chest: 0, big_chest: 0, coop: 0, water_collector: 0 };
+const REACH = { ore: 1.3, obsidian: 1.3, furnace: 1.9, drying_rack: 1.8, coop: 2.4, water_collector: 1.7, pickup: 1.7, fiber: 1.7, berry: 1.9, palm: 1.35, tree: 1.35, node: 1.1, crab: 1.5, campfire: 2.0, bed: 2.0, farm_plot: 1.6, animal: 2.0, cache: 1.6, chest: 1.6, big_chest: 1.7 };
+const BASE_TYPES = ['coop', 'water_collector', 'furnace', 'drying_rack'];
+const PLACED0 = { furnace: 0, drying_rack: 0, foundation: 0, walls: 0, doorway: 0, roof: 0, campfire: 0, bed: 0, farm_plot: 0, chest: 0, big_chest: 0, coop: 0, water_collector: 0 };
 
 export class Game {
   constructor({ renderer, scene, camera, quality, canvas, mode = 'solo' }) {
@@ -89,6 +93,7 @@ export class Game {
     this.caches = new Caches(scene, this.terrain, this.nature);
     this.base = new Base(this);
     this.fishing = new Fishing(this);
+    this.cave = new Cave(this);
     // subtle ring under whatever the action button will use
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.7, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0.0, depthWrite: false }));
     this.ring.renderOrder = 3;
@@ -216,7 +221,8 @@ export class Game {
     if (id === this._heldId) return;
     this._heldId = id;
     const c = this.player.char;
-    c.holdPose = id === 'torch' ? 'torch' : null;
+    c.holdPose = ITEMS[id]?.tool === 'torch' ? 'torch' : null;
+    this.fx.torchI = ITEMS[id]?.light || 1.6;
     this.viewModel.clear();
     if (!id) { c.setHeld(null); this.fx.torch = null; return; }
     const vm = itemMesh(id);
@@ -236,7 +242,7 @@ export class Game {
       this.fx.torch = fl;
       this._torchFlame = fl;
       const vf = fl.clone(); vf.material = fl.material; vf.scale.set(0.09, 0.16, 1); vf.position.set(0, 0.3, 0); vm.add(vf);
-    } else this.fx.torch = null;
+    } else this.fx.torch = id === 'lantern' ? m : null;
     c.setHeld(m);
     this.applyView();
   }
@@ -415,9 +421,24 @@ export class Game {
         const has = this.hasTool('axe');
         return { label: has ? 'Taglia' : 'Serve l’ascia', icon: 'item:' + (has ? this.inv.slots[this.bestToolSlot('axe')].id : 'axe'), ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
       }
-      case 'node': {
-        const has = this.hasTool('pickaxe');
-        return { label: has ? 'Scava' : 'Serve il piccone', icon: 'item:pickaxe', ready: has, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
+      case 'node': case 'ore': case 'obsidian': {
+        const def = MINERALS[t.kind], slot = this.bestToolSlot('pickaxe');
+        const power = slot >= 0 ? ITEMS[this.inv.slots[slot].id].power || 1 : 0;
+        const ok = power >= def.need;
+        return { label: ok ? 'Scava' : def.need > 1 ? 'Serve il piccone di ferro' : 'Serve il piccone', icon: 'item:' + (slot >= 0 ? this.inv.slots[slot].id : 'pickaxe'), ready: ok, name: o.label, hp: o.hp < o.maxHp ? o.hp / o.maxHp : null };
+      }
+      case 'furnace': {
+        if (!o.ref.data) this.base.init(o.ref);
+        const d = o.ref.data;
+        return { label: 'Apri', icon: 'fire', ready: true, name: `Fornace · minerale ${d.ore || 0} · legna ${d.fuel || 0} · lingotti ${d.out || 0}` };
+      }
+      case 'drying_rack': {
+        if (!o.ref.data) this.base.init(o.ref);
+        const d = o.ref.data, ready = this.base.ready(o.ref).length, raw = Object.keys(DRYING).find((id) => this.inv.count(id) > 0);
+        const name = `Essiccatoio · ${d.hang.length}/${RACK.slots}${ready ? ' · pronto' : ''}`;
+        if (ready) return { label: `Raccogli (${ready})`, icon: 'hand', ready: true, name };
+        if (raw && d.hang.length < RACK.slots) return { label: 'Appendi', icon: 'item:' + raw, ready: true, name };
+        return { label: d.hang.length ? 'Sta essiccando…' : 'Serve carne o pesce', icon: 'hand', ready: false, name };
       }
       case 'crab': return { label: 'Cattura', icon: 'hand', ready: true, name: 'Granchio' };
       case 'campfire': return this.rawFood() ? { label: 'Cucina', icon: 'fire', ready: true, name: 'Falò' } : { label: 'Scaldati', icon: 'fire', ready: true, name: 'Falò' };
@@ -537,13 +558,16 @@ export class Game {
         this.actionCooldown = 0.65;
         break;
       }
-      case 'node': {
-        if (!this.ensureTool('pickaxe')) { this.ui.toast('pickaxe', 'Ti serve un piccone di pietra', true); this.audio.error(); this.actionCooldown = 1; return; }
+      case 'node': case 'ore': case 'obsidian': {
+        const def = MINERALS[t.kind];
+        if (!this.ensureTool('pickaxe')) { this.ui.toast('pickaxe', 'Ti serve un piccone', true); this.audio.error(); this.actionCooldown = 1; return; }
+        const power = ITEMS[this.heldTool()]?.power || 1;
+        if (power < def.need) { this.ui.toast('pickaxe3', 'Troppo dura: serve un piccone di ferro', true); this.audio.error(); this.actionCooldown = 1; return; }
         this.faceTarget(o);
         this.audio.swing();
         c.play('mine', 0.65, () => {
           if (!o.alive) return;
-          o.hp--;
+          o.hp -= power;
           const hitAt = new THREE.Vector3(o.x, o.y + 0.6, o.z).addScaledVector(P.forward, -o.r * 0.8);
           this.fx.burst('stone', hitAt, 14);
           this.fx.sparkle(hitAt, 4, 0xffc070);
@@ -551,12 +575,13 @@ export class Game {
           this.rig.shake(0.05, 0.15);
           this.nature.shake(o, 0.6, P.pos.x, P.pos.z);
           if (o.hp > 0) this.emit('hit', { i: o.id, hp: o.hp, x: P.pos.x, z: P.pos.z });
-          this.give('stone', 1, false, hitAt);
+          if (def.perHit) this.give(def.item, def.perHit, false, hitAt);
           if (o.hp <= 0) {
-            this.give('stone', 3, false, hitAt);
+            this.give(def.item, def.bonus, false, hitAt);
+            if (t.kind !== 'node' && Math.random() < 0.5) this.give('stone', 2, false, hitAt);
             this.fx.burst('dust', new THREE.Vector3(o.x, o.y + 0.4, o.z), 20);
-            this.nature.remove(o, 240, time);
-            this.emit('remove', { i: o.id, d: 240 });
+            this.nature.remove(o, def.respawn, time);
+            this.emit('remove', { i: o.id, d: def.respawn });
           }
         }, 0.55);
         this.actionCooldown = 0.7;
@@ -645,6 +670,31 @@ export class Game {
         this.faceTarget(o);
         if (!act) { this.ui.toast('corn', 'Dai mais alle galline, oppure metti a covare un uovo', true); this.audio.error(); this.actionCooldown = 1; return; }
         c.play('gather', 0.6, () => act.run(), 0.5);
+        this.actionCooldown = 0.7;
+        break;
+      }
+      case 'furnace': {
+        this.faceTarget(o);
+        if (!o.ref.data) this.base.init(o.ref);
+        this.openFurnace = o.ref;
+        this.ui.openPanel('furnace');
+        this.actionCooldown = 0.5;
+        break;
+      }
+      case 'drying_rack': {
+        const pl = o.ref;
+        this.faceTarget(o);
+        if (!pl.data) this.base.init(pl);
+        c.play('gather', 0.6, () => {
+          if (this.base.ready(pl).length) {
+            for (const id of this.base.takeDried(pl)) this.give(id, 1, false, new THREE.Vector3(pl.x, pl.y + 1.1, pl.z));
+            this.progress.dried = (this.progress.dried || 0) + 1;
+          } else {
+            const raw = Object.keys(DRYING).find((id) => this.inv.count(id) > 0);
+            if (raw && this.base.hang(pl, raw)) { this.inv.remove(raw, 1); this.ui.toast(raw, 'Appeso a essiccare (2–3 minuti)'); }
+          }
+          this.save();
+        }, 0.5);
         this.actionCooldown = 0.7;
         break;
       }
@@ -857,6 +907,35 @@ export class Game {
     return null;
   }
 
+  // ---- furnace panel actions ----
+  furnaceAdd(kind) {
+    const p = this.openFurnace; if (!p) return;
+    const d = p.data;
+    if (kind === 'ore') {
+      const id = Object.keys(SMELT.recipes).find((k) => this.inv.count(k) > 0);
+      if (!id) { this.ui.toast('iron_ore', 'Non hai minerale da fondere', true); this.audio.error(); return; }
+      const n = Math.min(this.inv.count(id), 30 - d.ore); this.inv.remove(id, n); d.ore += n;
+      this.ui.toast(id, `+${n} minerale nella fornace`);
+    } else {
+      const id = Object.keys(SMELT.fuel).find((k) => this.inv.count(k) > 0);
+      if (!id) { this.ui.toast('wood', 'Serve legna come combustibile', true); this.audio.error(); return; }
+      const n = Math.min(this.inv.count(id), 10); this.inv.remove(id, n); d.fuel += n * SMELT.fuel[id];
+      this.ui.toast(id, `+${n * SMELT.fuel[id]} combustibile`);
+    }
+    d.last = this.progress.playTime;
+    this.base.refresh(p, true);
+    this.audio.chest(); this.save();
+  }
+  furnaceTake() {
+    const p = this.openFurnace; if (!p || !p.data.out) return;
+    const n = p.data.out; p.data.out = 0;
+    this.give('iron_ingot', n, false, new THREE.Vector3(p.x, p.y + 0.8, p.z));
+    this.progress.smelted = (this.progress.smelted || 0) + n;
+    if ((this.progress.smelted || 0) === n) setTimeout(() => this.ui.center('Primo lingotto!', 'Sbloccato: livello Metallo · attrezzi di ferro nella scheda Crea', 3000), 400);
+    this.base.refresh(p, true);
+    this.checkQuest(); this.save();
+  }
+
   nearStation(st) {
     const P = this.player.pos;
     return this.building.placeables.some((p) => p.type === st && Math.hypot(p.x - P.x, p.z - P.z) < 4.5);
@@ -909,7 +988,7 @@ export class Game {
     }
     this.inv.consume(cost);
     B.placePiece(piece, t, true);
-    if (piece === 'coop' || piece === 'water_collector') this.base.init(B.placeables[B.placeables.length - 1]);
+    if (BASE_TYPES.includes(piece)) this.base.init(B.placeables[B.placeables.length - 1]);
     this.emit('build', { type: piece, tg: { i: t.i, j: t.j, d: t.d, x: t.x, y: t.y, z: t.z, rot: t.rot, level: t.level } });
     this.audio.build();
     this.player.char.play('build', 0.5);
@@ -984,7 +1063,7 @@ export class Game {
     const S = this.stats, P = this.player;
     const exert = (P.running ? 1.7 : P.swimming ? 1.5 : 1) * (this.hasBuff('energia') && (P.running || P.swimming) ? 0.6 : 1);
     const nearFire = this.building.placeables.some((p) => p.type === 'campfire' && Math.hypot(p.x - P.pos.x, p.z - P.pos.z) < 5);
-    S.water -= dt * 0.16 * exert;
+    S.water -= dt * 0.16 * exert * (this.hasBuff('esploratore') ? 0.55 : 1);
     S.food -= dt * 0.105 * exert * (this.hasBuff('sazio') ? 0.5 : 1);
     if (this.hasBuff('rigenera')) S.health += dt * 0.6;
     if (S.water <= 0 || S.food <= 0) {
@@ -1036,7 +1115,7 @@ export class Game {
       this.nature.all.forEach((r, i) => { if (!r.alive) depleted.push([i, Math.max(0, (r.respawnAt || 0) - this.time)]); });
       const data = {
         v: SAVE_VERSION, savedAt: Date.now(), stats: this.stats, progress: this.progress, questIndex: this.questIndex, questId: QUESTS[this.questIndex]?.id || 'done', inv: this.inv.toJSON(), selected: this.selected,
-        time: this.sky.time, day: this.sky.day, player: { x: this.player.pos.x, z: this.player.pos.z, f: this.player.facing },
+        time: this.sky.time, day: this.sky.day, player: { x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z, f: this.player.facing },
         building: this.building.toJSON(), respawn: this.respawn, depleted, drift: this.caches.driftJSON(),
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1157,7 +1236,7 @@ export class Game {
     for (const k of ['caches', 'blueprints', 'killed']) this.progress[k] = this.progress[k] || {};
     this.caches.load(Object.keys(this.progress.caches));
     for (const dr of d.drift || []) this.caches.spawnDrift(this.terrain, this.scene, dr);
-    for (const p of this.building.placeables) if (p.type === 'coop' || p.type === 'water_collector') this.base.init(p);
+    for (const p of this.building.placeables) if (BASE_TYPES.includes(p.type)) this.base.init(p);
     this.progress.buffs = this.progress.buffs || {};
     this.syncPlacedCounts();
     this.respawn = d.respawn || this.respawn;
@@ -1165,7 +1244,7 @@ export class Game {
       const r = this.nature.all[i];
       if (r) this.nature.removeInstant(r, rem || 60, 0);
     }
-    if (d.player) this.player.teleport(d.player.x, d.player.z, d.player.f);
+    if (d.player) this.player.teleport(d.player.x, d.player.z, d.player.f, d.player.y ?? 999);
     this.rig.yaw = this.player.facing + Math.PI;
     this.loaded = true;
     return true;
@@ -1205,6 +1284,13 @@ export class Game {
     }
 
     this.sky.update(dt, this.started ? P.pos : this.camera.position);
+    // inside the cave daylight fades out: only fires, torches and the lantern light the way
+    const ck = this.cave?.k || 0;
+    if (ck > 0.01) {
+      this.sky.sun.intensity *= 1 - 0.92 * ck;
+      this.sky.hemi.intensity *= 1 - 0.86 * ck;
+      this.scene.fog.color.lerp(this._caveFog ||= new THREE.Color(0x0a0908), ck * 0.85);
+    }
     this.fill.position.copy(this.camera.position).add(new THREE.Vector3(0, 2, 0));
     this.fill.intensity = this.sky.night * 9;
     this.sky.applyToWater(this.ocean.material); this.sky.applyToWater(this.pond.material);
@@ -1219,6 +1305,8 @@ export class Game {
       this.farming.update(dt);
       this.base.update(dt);
       this.fishing.update(dt);
+      this.cave.update(dt, P);
+      if (!this.progress.reachedDeep && this.terrain.caveRooms && Math.hypot(P.pos.x - this.terrain.caveRooms.deep.x, P.pos.z - this.terrain.caveRooms.deep.z) < 10) { this.progress.reachedDeep = true; this.ui.center('La sala profonda', 'Qui il ferro abbonda… e c’è dell’altro', 2600); this.checkQuest(); }
       this.updateDrift();
     }
     this.birds.update(dt, this.sky.night);
@@ -1232,7 +1320,7 @@ export class Game {
       if (c.roofObj) c.roofObj.visible = !(underRoof && c.roofObj.position.distanceTo(P.pos) < 9);
     }
     this.updateFlying(dt);
-    this.fx.update(dt, this.camera.position, this.sky.night);
+    this.fx.update(dt, this.camera.position, Math.max(this.sky.night, ck));
     this.fx.setScale(this.renderer.domElement.height / this.renderer.getPixelRatio() * 0.9);
 
     if (!this.started) return;
@@ -1298,6 +1386,7 @@ export class Game {
       this.ui.drawMinimap(P, markers);
       this.ui.setPartner(this.coop);
       this.ui.setClock(this.sky.hours, this.sky.day);
+      if (this.panelOpen && this.ui.tab === 'furnace') this.ui.refreshPanel();
       this.ui.setBuffs(Object.keys(BUFFS).filter((id) => this.hasBuff(id)).map((id) => `${BUFFS[id].icon} ${BUFFS[id].name} ${Math.ceil((this.progress.buffs[id] - this.progress.playTime) / 60)}′`));
     }
     // ambience

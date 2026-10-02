@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { materials } from '../world/materials.js';
-import { PIECES, FREE_PLACE, STORAGE, campfireGeo, bedGeo, farmPlotGeo, chestGeo, coopGeo, collectorGeo, itemMaterial } from './items.js';
+import { PIECES, FREE_PLACE, STORAGE, campfireGeo, bedGeo, farmPlotGeo, chestGeo, coopGeo, collectorGeo, furnaceGeo, rackGeo, itemMaterial } from './items.js';
 import { Inventory } from './inventory.js';
 import { mulberry32 } from '../util/noise.js';
 
@@ -145,6 +145,8 @@ export function pieceModel(type) {
   else if (type === 'big_chest') m = [{ geo: chestGeo(1.3, 0.75, 0.75), mat: itemMaterial }];
   else if (type === 'coop') m = [{ geo: coopGeo(), mat: itemMaterial }];
   else if (type === 'water_collector') m = [{ geo: collectorGeo(), mat: itemMaterial }];
+  else if (type === 'furnace') m = [{ geo: furnaceGeo(), mat: itemMaterial }];
+  else if (type === 'drying_rack') m = [{ geo: rackGeo(), mat: itemMaterial }];
   else m = wallModel(type);
   return (modelCache[type] = m);
 }
@@ -339,7 +341,7 @@ export class Building {
       const pl = { type, x: t.x, y: t.y, z: t.z, rot: t.rot, obj };
       if (type === 'farm_plot') pl.crop = t.crop ? { ...t.crop } : null;
       if (t.data) pl.data = JSON.parse(JSON.stringify(t.data));
-      if (type === 'coop' || type === 'water_collector') { pl.collider = { x: t.x, z: t.z, r: type === 'coop' ? 0.9 : 0.55, h: t.y + 1.2 }; this.world.circles.push(pl.collider); }
+      if (type === 'coop' || type === 'water_collector' || type === 'furnace' || type === 'drying_rack') { pl.collider = { x: t.x, z: t.z, r: type === 'coop' ? 0.9 : type === 'furnace' ? 0.8 : 0.55, h: t.y + 1.2 }; this.world.circles.push(pl.collider); }
       if (STORAGE[type]) { pl.store = new Inventory(STORAGE[type]); if (t.store) pl.store.load(t.store); }
       if (type === 'chest' || type === 'big_chest') { pl.collider = { x: t.x, z: t.z, r: type === 'chest' ? 0.5 : 0.7, h: t.y + 0.8 }; this.world.circles.push(pl.collider); }
       if (type === 'campfire') {
@@ -422,6 +424,8 @@ export class Building {
     }
     if (best.kind === 'free' && best.ref.store && best.ref.store.slots.some(Boolean)) best.blocked = 'Svuota prima la cassa';
     if (best.kind === 'free' && best.type === 'coop' && (best.ref.data?.hens > 0 || best.ref.data?.eggs > 0)) best.blocked = 'Nel pollaio ci sono galline o uova';
+    if (best.kind === 'free' && best.type === 'furnace' && (best.ref.data?.ore > 0 || best.ref.data?.out > 0)) best.blocked = 'Svuota prima la fornace';
+    if (best.kind === 'free' && best.type === 'drying_rack' && best.ref.data?.hang?.length) best.blocked = 'Prima togli il cibo appeso';
     return best;
   }
   _edgeHasOtherFloor(ek, i, j) {

@@ -145,6 +145,36 @@ export const QUESTS = [
   },
 ];
 
+QUESTS.push(
+  {
+    id: 'cave', title: 'La grotta',
+    lines: (s) => [{ text: 'Raggiungi la sala più profonda della grotta', done: !!s.reachedDeep }],
+    hint: 'L’ingresso è ai piedi della grande parete del monte, a ovest della cascata. Porta una torcia e scorte da viaggio.',
+    goal: 'Minerali e un progetto che non trovi altrove',
+  },
+  {
+    id: 'ore', title: 'Minatore',
+    lines: (s) => [{ text: `Estrai minerale di ferro (${Math.min(s.col.iron_ore || 0, 4)}/4)`, done: (s.col.iron_ore || 0) >= 4 }],
+    hint: 'Le vene rossastre lungo le pareti della grotta. Serve un piccone.',
+    goal: 'Il ferro serve per attrezzi migliori',
+  },
+  {
+    id: 'smelt', title: 'Fuoco e metallo',
+    lines: (s) => [
+      { text: 'Costruisci una fornace', done: (s.placed.furnace || 0) >= 1 },
+      { text: 'Fondi un lingotto di ferro', done: (s.smelted || 0) >= 1 },
+    ],
+    hint: 'Metti minerale e legna nella fornace e attendi. Il progetto è nel forziere in fondo alla grotta.',
+    goal: 'Sblocca: livello Metallo',
+  },
+  {
+    id: 'metaltool', title: 'L’età del ferro',
+    lines: (s) => [{ text: 'Crea un attrezzo di ferro', done: ['pickaxe3', 'axe3', 'spear3'].some((k) => (s.crafted[k] || 0) >= 1) }],
+    hint: 'Il piccone di ferro spacca anche l’ossidiana delle sale profonde.',
+    goal: 'Raccolta più rapida, armi più forti',
+  },
+);
+
 const foodHarvests = (s) => ['potato', 'corn', 'herb', 'pineapple'].reduce((a, k) => a + ((s.harvestedCrops || {})[k] || 0), 0);
 
 // long-term goal: a base that keeps you alive on its own
@@ -160,7 +190,7 @@ export const SELF_SUFFICIENCY = [
 export const FREE_PLAY = (s) => ({
   title: 'Base autosufficiente',
   lines: SELF_SUFFICIENCY.filter((g) => !g.done(s)).slice(0, 2).map((g) => ({ text: g.text, done: false }))
-    .concat([{ text: `Trova le scorte nascoste (${Object.keys(s.caches || {}).length}/7)`, done: Object.keys(s.caches || {}).length >= 7 }]),
+    .concat([{ text: `Trova le scorte nascoste (${Object.keys(s.caches || {}).length}/8)`, done: Object.keys(s.caches || {}).length >= 8 }]),
   hint: 'Cascata, grotta, caletta nascosta, belvedere e scogliere nascondono casse utili.',
   goal: 'Più la base è completa, più la vita sull’isola è facile',
 });

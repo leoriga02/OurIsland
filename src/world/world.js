@@ -14,6 +14,9 @@ export class World {
 
   groundHeight(x, z, fromY = 999) {
     let h = this.terrain.heightAt(x, z);
+    // standing on top of the cave roof (the mountain over the tunnel), not inside it
+    const roof = this.terrain.roofAt(x, z);
+    if (roof !== null && fromY >= roof - 1.2) h = roof;
     for (const p of this.platforms) {
       if (x >= p.minX && x <= p.maxX && z >= p.minZ && z <= p.maxZ && p.top <= fromY + 2.0 && p.top > h) h = p.top;
     }

@@ -167,7 +167,7 @@ export class Fx {
     const emitters = this.fires.map((f) => ({ p: f.pos, i: 2.2 * f.scale, h: 0.6 }));
     if (this.torch) {
       const wp = this.torch.getWorldPosition(new THREE.Vector3());
-      emitters.push({ p: wp, i: 1.6, h: 0.25, torch: true });
+      emitters.push({ p: wp, i: this.torchI || 1.6, h: 0.25, torch: true });
     }
     emitters.sort((x, y) => x.p.distanceToSquared(camPos) - y.p.distanceToSquared(camPos));
     const t = performance.now() / 1000;

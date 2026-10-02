@@ -1,5 +1,5 @@
 // DOM HUD, hotbar, inventory/crafting panel, build bar, minimap.
-import { ITEMS, RECIPES, PIECES, TIERS, STATIONS, tierUnlocked } from '../game/items.js';
+import { ITEMS, RECIPES, PIECES, TIERS, STATIONS, SMELT, tierUnlocked } from '../game/items.js';
 import { HOTBAR } from '../game/inventory.js';
 import { SVG } from './icons.js';
 import { WORLD_SIZE } from '../world/terrain.js';
@@ -296,6 +296,7 @@ export class UI {
     this.panel.classList.add('hidden');
     this.g.panelOpen = false;
     if (this.tab === 'chest') { this.g.openChest = null; this.g.save(); }
+    if (this.tab === 'furnace') this.g.openFurnace = null;
     this.selSlot = -1;
   }
   get isOpen() { return !this.panel.classList.contains('hidden'); }
@@ -306,14 +307,14 @@ export class UI {
     // inventory is always visible on wide screens next to crafting; on the inv tab show only inventory
     const wide = window.innerWidth > 900;
     const settings = this.tab === 'settings';
-    const chest = this.tab === 'chest' && this.g.openChest;
+    const chest = (this.tab === 'chest' && this.g.openChest) || (this.tab === 'furnace' && this.g.openFurnace);
     this.panel.classList.toggle('chestmode', !!chest);
     invBox.classList.toggle('hidden', settings || (this.tab !== 'inv' && !wide && !chest));
     craftBox.classList.toggle('hidden', this.tab === 'inv' || settings);
     $('settings-box').classList.toggle('hidden', !settings);
     if (settings) { this._renderSettings(); return; }
     this._renderInv();
-    if (chest) this._renderChest();
+    if (chest) this.tab === 'furnace' ? this._renderFurnace() : this._renderChest();
     if (this.tab === 'craft') this._renderCraft();
     if (this.tab === 'build') this._renderBuild();
   }
@@ -327,7 +328,7 @@ export class UI {
       d.className = 'slot' + (i < HOTBAR ? ' hb' : '') + (i === this.selSlot ? ' sel' : '');
       d.innerHTML = (i < HOTBAR ? `<span class="k">${i + 1}</span>` : '') + (s ? `<img src="${this.icons.item(s.id)}">${s.n > 1 ? `<span class="n">${s.n}</span>` : ''}` : '');
       d.addEventListener('click', () => {
-        if (this.tab === 'chest' && this.g.openChest && s) { this.g.moveStack(inv, i, this.g.openChest.store); this.refreshPanel(); return; }
+        if (this.tab === 'chest' && this.g.openChest && s && this.tab !== 'furnace') { this.g.moveStack(inv, i, this.g.openChest.store); this.refreshPanel(); return; }
         if (this.selSlot >= 0 && this.selSlot !== i) { inv.swap(this.selSlot, i); this.selSlot = -1; }
         else this.selSlot = this.selSlot === i ? -1 : (s ? i : -1);
         this.refreshPanel();
@@ -507,5 +508,25 @@ export class UI {
     if (key === this._buffKey) return;
     this._buffKey = key;
     $('buffs').innerHTML = list.map((t) => `<span>${t}</span>`).join('');
+  }
+
+  // furnace: ore + fuel in, ingots out, progress while it burns
+  _renderFurnace() {
+    const box = $('craft-box');
+    box.classList.remove('hidden');
+    box.querySelector('h2').textContent = 'Fornace';
+    const d = this.g.openFurnace.data, burning = d.ore > 0 && d.fuel > 0;
+    const row = (id, label, n) => `<div class="cost" style="min-width:150px"><img src="${this.icons.item(id)}">${label}: <b>&nbsp;${n}</b></div>`;
+    $('craft-list').innerHTML = `<div class="costs" style="flex-direction:column;align-items:flex-start;gap:6px">
+      ${row('iron_ore', 'Minerale', d.ore)}${row('wood', 'Combustibile', d.fuel)}${row('iron_ingot', 'Lingotti pronti', d.out)}</div>
+      <div style="margin-top:8px;height:8px;border-radius:4px;background:rgba(255,255,255,0.12);overflow:hidden"><div style="height:100%;width:${Math.round((d.t / SMELT.time) * 100)}%;background:#ff9a3a"></div></div>
+      <div class="set-note">${burning ? '🔥 In funzione · un lingotto ogni ' + SMELT.time + ' s' : d.ore > 0 ? 'Serve combustibile (legna)' : 'Metti minerale di ferro e legna'}</div>`;
+    const det = $('craft-detail');
+    det.innerHTML = `<button class="craft-btn" data-f="ore">METTI MINERALE</button><button class="craft-btn" data-f="fuel">METTI LEGNA</button><button class="craft-btn" data-f="take" ${d.out ? '' : 'disabled'}>RITIRA LINGOTTI</button>`;
+    det.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => {
+      const f = b.dataset.f;
+      if (f === 'take') this.g.furnaceTake(); else this.g.furnaceAdd(f);
+      this.refreshPanel();
+    }));
   }
 }

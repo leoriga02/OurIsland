@@ -6,6 +6,7 @@ import { chestGeo, itemMaterial } from './items.js';
 export const BLUEPRINTS = {
   tools2: { name: 'Attrezzi migliori', desc: 'Ascia e lancia rinforzate' },
   build2: { name: 'Costruzione avanzata', desc: 'Finestre e baule' },
+  metal: { name: 'Metallurgia', desc: 'Fornace: fondi il minerale di ferro in lingotti' },
 };
 
 // where(T) -> [x, z] near a landmark; the cache snaps to the nearest flat, dry spot
@@ -17,6 +18,8 @@ export const CACHES = [
   { id: 'cove', name: 'Baule dei contrabbandieri', where: (T) => [T.cove.x - 14, T.cove.z - 22], loot: { rope: 3, hide: 2, meat_cooked: 2 }, blueprint: 'build2' },
   { id: 'lookout', name: 'Scorta del belvedere', where: (T) => [T.lookout.x + 3, T.lookout.z + 2], loot: { coconut: 3, meat_cooked: 1, fiber_sprout: 3, pineapple_top: 2 } },
   { id: 'rocky', name: 'Cassa sugli scogli', where: () => [-372, 92], loot: { wood: 6, stone: 4, rope: 1 } },
+  // deep in the cave: the reason to go in
+  { id: 'deep', name: 'Forziere dei minatori', where: (T) => (T.caveRooms ? [T.caveRooms.deep.x, T.caveRooms.deep.z] : [T.cave.x, T.cave.z]), loot: { iron_ore: 4, torch: 2, rope: 2, jerky: 2 }, blueprint: 'metal', exact: true },
 ];
 
 function findSpot(T, x, z) {
@@ -51,7 +54,7 @@ export class Caches {
     this.list = [];
     const geo = chestGeo(0.95, 0.62, 0.62);
     for (const c of CACHES) {
-      const [x, z] = findSpot(terrain, ...c.where(terrain));
+      const [x, z] = c.exact ? c.where(terrain) : findSpot(terrain, ...c.where(terrain));
       const y = terrain.heightAt(x, z);
       const m = new THREE.Mesh(geo, itemMaterial);
       m.castShadow = m.receiveShadow = true;

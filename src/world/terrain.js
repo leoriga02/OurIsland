@@ -213,11 +213,81 @@ export class Terrain {
       const floor = dp < P.r ? P.y - 2.2 * (1 - (dp / P.r) ** 2) - 0.1 : P.y + 0.25;
       H[k] = lerp(floor, H[k], smoothstep(P.r - 0.5, P.r + 5, dp));
     });
+    this._carveCave();
     // spawn on the big south beach
     let sx = -16, sz = 470;
     while (sz > 0 && this.heightAt(sx, sz) < 0.55) sz -= 0.5;
     this.spawn = new THREE.Vector3(sx, 0, sz - 5);
     this.wreck = new THREE.Vector3(sx - 10, 0, sz + 4);
+  }
+
+  // ---------- the cave: tunnels and chambers carved into massif A behind the cave mouth ----------
+  // Each node: [metres in, metres sideways, half width, floor drop]. The floor follows the nodes; walls are
+  // the steep carved sides; a rock lid (built by world/cave.js) closes the roof.
+  _carveCave() {
+    const cv = this.cave, H = this.heights;
+    const fx = -cv.ax, fz = -cv.az, sx = -fz, sz = fx; // forward into the mountain, sideways
+    const NODES = [[-7, 0, 4.2, 0], [5, 0, 4.2, -0.2], [19, -3, 8.5, -0.9], [31, 3, 3.6, -1.8], [43, 9, 3.6, -2.6], [57, 7, 11, -3.4]];
+    const floor0 = this.heightAt(cv.x + cv.ax * 6, cv.z + cv.az * 6);
+    const pts = NODES.map(([d, l, w, f]) => ({ x: cv.x + fx * d + sx * l, z: cv.z + fz * d + sz * l, w, f: floor0 + f }));
+    this.cavePath = pts;
+    this.caveFloor0 = floor0;
+    this.caveRooms = { entry: pts[2], gallery: { x: (pts[3].x + pts[4].x) / 2, z: (pts[3].z + pts[4].z) / 2 }, deep: pts[5], mouth: pts[1] };
+    this.caveOrig = new Map(); // grid index -> height before carving (for the roof lid)
+    let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+    for (const p of pts) { minX = Math.min(minX, p.x - p.w - 6); maxX = Math.max(maxX, p.x + p.w + 6); minZ = Math.min(minZ, p.z - p.w - 6); maxZ = Math.max(maxZ, p.z + p.w + 6); }
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, R = Math.hypot(maxX - minX, maxZ - minZ) / 2;
+    this._forArea(cx, cz, R, (k, x, z) => {
+      const q = this.caveQuery(x, z);
+      if (!q) return;
+      const wob = this.noise(x * 0.3, z * 0.3) * 0.8;
+      const inside = smoothstep(q.w + 3.2 + wob, q.w + wob, q.d);
+      if (inside <= 0) return;
+      const fl = q.f + this.n2(x * 0.25, z * 0.25) * 0.25;
+      const nh = lerp(H[k], fl, inside);
+      if (nh < H[k]) { if (!this.caveOrig.has(k)) this.caveOrig.set(k, H[k]); H[k] = nh; }
+    });
+    // roofed cells: carved deeper than a person, so the original surface stays as a rock lid you can walk on
+    this.roofK = new Set();
+    for (const [k, o] of this.caveOrig) {
+      const q = this.caveQuery(-HALF + (k % N) * CELL, -HALF + ((k / N) | 0) * CELL);
+      if (q && o - q.f > 5) this.roofK.add(k);
+    }
+  }
+
+  // height of the cave roof's top surface (the untouched mountain) or null where there is no lid
+  roofAt(x, z) {
+    if (!this.roofK) return null;
+    const fx = (x + HALF) / CELL, fz = (z + HALF) / CELL;
+    if (fx < 0 || fz < 0 || fx >= GRID || fz >= GRID) return null;
+    const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+    const k = j * N + i, R = this.roofK, O = this.caveOrig;
+    if (!R.has(k) || !R.has(k + 1) || !R.has(k + N) || !R.has(k + N + 1)) return null;
+    const h00 = O.get(k), h10 = O.get(k + 1), h01 = O.get(k + N), h11 = O.get(k + N + 1);
+    if (u + v < 1) return h00 + (h10 - h00) * u + (h01 - h00) * v;
+    return h11 + (h01 - h11) * (1 - u) + (h10 - h11) * (1 - v);
+  }
+
+  // nearest point on the cave polyline: distance, local half width and floor height (null when far away)
+  caveQuery(x, z) {
+    const pts = this.cavePath;
+    if (!pts) return null;
+    let best = null;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const vx = b.x - a.x, vz = b.z - a.z, L2 = vx * vx + vz * vz;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * vx + (z - a.z) * vz) / L2));
+      const d = Math.hypot(x - (a.x + vx * t), z - (a.z + vz * t));
+      if (!best || d < best.d) best = { d, w: lerp(a.w, b.w, t), f: lerp(a.f, b.f, t), seg: i + t };
+    }
+    return best;
+  }
+  inCaveArea(x, z, pad = 4) { const q = this.caveQuery(x, z); return !!q && q.d < q.w + pad; }
+  // 0..1: how far inside the cave (roofed part) a point is
+  caveW(x, z) {
+    const q = this.caveQuery(x, z);
+    if (!q || q.seg < 1.2) return 0;
+    return smoothstep(q.w + 2, q.w - 1, q.d) * smoothstep(1.2, 1.8, q.seg);
   }
 
   _forArea(cx, cz, R, fn) {
@@ -494,6 +564,14 @@ export class Terrain {
       const slope = 1 - v.y;
       rockW[k] = h < 0.3 ? 0 : Math.max(smoothstep(0.18, 0.4, slope), this.mRocky[k] * smoothstep(0.1, 0.24, slope));
       grassW[k] = h < 0.05 ? 0 : smoothstep(sandLine, sandLine + 0.9, h) * (1 - smoothstep(0.18, 0.4, slope)) * smoothstep(1.2, 2.6, this._pathDist(x, z));
+      const cq = this.caveOrig.has(k) ? this.caveQuery(x, z) : null;
+      if (cq) { // cave floor and walls: dark damp rock and gravel
+        const cin = smoothstep(cq.w + 3.5, cq.w - 1, cq.d);
+        c.setRGB(0.24, 0.22, 0.2).lerp(t.setRGB(0.33, 0.3, 0.27), this.noise(x * 0.2, z * 0.2) * 0.5 + 0.5);
+        col[k * 3] = col[k * 3] * (1 - cin) + c.r * cin; col[k * 3 + 1] = col[k * 3 + 1] * (1 - cin) + c.g * cin; col[k * 3 + 2] = col[k * 3 + 2] * (1 - cin) + c.b * cin;
+        grassW[k] *= 1 - cin; rockW[k] = Math.max(rockW[k], cin);
+        this._wRock = Math.max(this._wRock || 0, cin); this._wJungle = 0; this._wSand = 0;
+      }
       layW[k * 4] = grassW[k]; layW[k * 4 + 1] = Math.max(rockW[k], this._wRock || 0); layW[k * 4 + 2] = h < 0.05 ? 1 : this._wSand || 0; layW[k * 4 + 3] = this._wJungle || 0;
     }
     this._arrays = { pos, nrm, uv, col, grassW, rockW };

@@ -58,6 +58,21 @@ export const ITEMS = {
   // ---- base ----
   coop: { name: 'Pollaio', desc: 'Casetta per galline. Dai mais: depongono uova e si moltiplicano.', stack: 2, place: 'coop' },
   water_collector: { name: 'Raccoglitore d’acqua', desc: 'Raccoglie acqua piovana e rugiada. Acqua sicura alla base.', stack: 3, place: 'water_collector' },
+  // ---- mining & metal ----
+  iron_ore: { name: 'Minerale di ferro', desc: 'Roccia rossastra ricca di ferro. Fondila in una fornace.', stack: 30 },
+  obsidian: { name: 'Ossidiana', desc: 'Vetro vulcanico nero e affilato. Si scava solo con un piccone di ferro.', stack: 20 },
+  iron_ingot: { name: 'Lingotto di ferro', desc: 'Metallo fuso, pronto per attrezzi migliori.', stack: 30 },
+  furnace: { name: 'Fornace', desc: 'Fonde il minerale in lingotti. Serve legna come combustibile.', stack: 2, place: 'furnace' },
+  pickaxe2: { name: 'Piccone rinforzato', desc: 'Scava il doppio più in fretta.', stack: 1, tool: 'pickaxe', power: 2, dmg: 4 },
+  axe3: { name: 'Ascia di ferro', desc: 'Abbatte qualsiasi albero in pochi colpi.', stack: 1, tool: 'axe', power: 3, dmg: 6 },
+  pickaxe3: { name: 'Piccone di ferro', desc: 'Scava velocissimo e spacca l’ossidiana.', stack: 1, tool: 'pickaxe', power: 3, dmg: 5 },
+  spear3: { name: 'Lancia di ferro', desc: 'Punta in ferro forgiato. Danni elevati.', stack: 1, tool: 'spear', dmg: 10 },
+  spear4: { name: 'Lancia di ossidiana', desc: 'Lama di vetro vulcanico: la migliore arma dell’isola.', stack: 1, tool: 'spear', dmg: 14 },
+  lantern: { name: 'Lanterna', desc: 'Luce forte e stabile: rende le grotte esplorabili.', stack: 1, tool: 'torch', light: 2.4 },
+  // ---- preservation ----
+  drying_rack: { name: 'Essiccatoio', desc: 'Appendi carne e pesce crudi: diventano scorte da viaggio.', stack: 2, place: 'drying_rack' },
+  jerky: { name: 'Carne essiccata', desc: 'Leggera e saziante. In esplorazione la sete cala più lentamente.', stack: 30, food: 26, buff: { id: 'esploratore', dur: 300 } },
+  dried_fish: { name: 'Pesce essiccato', desc: 'Scorta da viaggio. In esplorazione la sete cala più lentamente.', stack: 30, food: 22, buff: { id: 'esploratore', dur: 300 } },
 };
 
 // Temporary food effects (applied in updateSurvival)
@@ -65,7 +80,19 @@ export const BUFFS = {
   sazio: { name: 'Sazio', icon: '🍲' },      // hunger drains at half speed
   energia: { name: 'Energia', icon: '⚡' },  // running and swimming tire less
   rigenera: { name: 'Rigenerazione', icon: '💚' }, // health regenerates
+  esploratore: { name: 'Esploratore', icon: '🧭' }, // thirst drains slower
 };
+
+// What each mineable rock gives; 'need' is the minimum pickaxe power, hp the hits at power 1
+export const MINERALS = {
+  node: { item: 'stone', perHit: 1, bonus: 3, hp: 5, need: 1, respawn: 240 },
+  ore: { item: 'iron_ore', perHit: 1, bonus: 2, hp: 6, need: 1, respawn: 600, label: 'Vena di ferro' },
+  obsidian: { item: 'obsidian', perHit: 0, bonus: 2, hp: 8, need: 3, respawn: 1200, label: 'Ossidiana' },
+};
+// Food preservation on the drying rack
+export const DRYING = { meat_raw: 'jerky', fish_mackerel: 'dried_fish', fish_bream: 'dried_fish', fish_tilapia: 'dried_fish', fish_grouper: 'dried_fish' };
+// Furnace: one ore + one fuel unit -> one ingot; fuel units per item
+export const SMELT = { time: 20, recipes: { iron_ore: 'iron_ingot' }, fuel: { wood: 2, stick: 1 } };
 
 // Crafting tiers: each unlocks once its requirement is met (req reads game progress; label says how).
 export const TIERS = [
@@ -74,6 +101,8 @@ export const TIERS = [
   { id: 3, name: 'Coltivazione', req: (p) => !!p.shelterDone, how: 'Completa un rifugio (fondazione, pareti, tetto)' },
   { id: 4, name: 'Attrezzi migliori', req: (p) => !!p.blueprints?.tools2, how: 'Trova il progetto nascosto nella grotta' },
   { id: 5, name: 'Costruzione avanzata', req: (p) => !!p.blueprints?.build2, how: 'Trova il progetto nella caletta nascosta' },
+  { id: 6, name: 'Metallurgia', req: (p) => !!p.blueprints?.metal, how: 'Trova il progetto in fondo alla grotta' },
+  { id: 7, name: 'Metallo', req: (p) => (p.crafted?.iron_ingot || p.smelted || 0) >= 1, how: 'Fondi il tuo primo lingotto' },
 ];
 export const tierUnlocked = (tier, progress) => (TIERS.find((t) => t.id === (tier || 1)) || TIERS[0]).req(progress);
 
@@ -81,13 +110,13 @@ export const tierUnlocked = (tier, progress) => (TIERS.find((t) => t.id === (tie
 export const STORAGE = { chest: 12, big_chest: 24 };
 
 // Damage dealt by whatever is in hand (bare hands = 1).
-export const WEAPON_DMG = { spear: 4, axe: 3, pickaxe: 3, torch: 1, axe2: 5, spear2: 7 };
+export const WEAPON_DMG = { spear: 4, axe: 3, pickaxe: 3, torch: 1, axe2: 5, spear2: 7, pickaxe2: 4, axe3: 6, pickaxe3: 5, spear3: 10, spear4: 14, lantern: 1 };
 
 // Cooking at a campfire: raw -> cooked (data-driven so new foods only need a line here).
 export const COOKING = { crab_raw: 'crab_cooked', meat_raw: 'meat_cooked', fish_mackerel: 'fish_cooked', fish_bream: 'fish_cooked', fish_tilapia: 'fish_cooked', fish_grouper: 'grouper_cooked', potato: 'baked_potato', corn: 'roast_corn' };
 
 // Items that are placed freely on the ground (not grid-snapped): placement distance and footprint radius.
-export const FREE_PLACE = { campfire: { d: 1.8, r: 0.7 }, bed: { d: 2.2, r: 0.7 }, farm_plot: { d: 2.6, r: 1.3 }, chest: { d: 1.8, r: 0.6 }, big_chest: { d: 2.0, r: 0.8 }, coop: { d: 3.2, r: 1.6 }, water_collector: { d: 2.0, r: 0.8 } };
+export const FREE_PLACE = { campfire: { d: 1.8, r: 0.7 }, bed: { d: 2.2, r: 0.7 }, farm_plot: { d: 2.6, r: 1.3 }, chest: { d: 1.8, r: 0.6 }, big_chest: { d: 2.0, r: 0.8 }, coop: { d: 3.2, r: 1.6 }, water_collector: { d: 2.0, r: 0.8 }, furnace: { d: 2.2, r: 0.9 }, drying_rack: { d: 2.0, r: 0.8 } };
 
 export const RECIPES = [
   // 1 · Sopravvivenza
@@ -109,8 +138,18 @@ export const RECIPES = [
   { out: 'water_collector', cost: { wood: 4, leaf: 4, rope: 1 }, tier: 2 },
   { out: 'coop', cost: { wood: 8, stick: 4, rope: 2, leaf: 4 }, tier: 3 },
   { out: 'bandage', cost: { herb: 2, fiber: 1 }, tier: 3 },
+  { out: 'pickaxe2', cost: { pickaxe: 1, wood: 2, rope: 2, stone: 4 }, tier: 4 },
+  { out: 'drying_rack', cost: { stick: 8, rope: 2, leaf: 2 }, tier: 3 },
   // 5 · Costruzione avanzata
   { out: 'big_chest', cost: { wood: 10, rope: 2, hide: 1 }, tier: 5 },
+  // 6 · Metallurgia
+  { out: 'furnace', cost: { stone: 16, wood: 4, iron_ore: 2 }, tier: 6 },
+  // 7 · Metallo
+  { out: 'pickaxe3', cost: { iron_ingot: 3, wood: 2, rope: 1 }, tier: 7 },
+  { out: 'axe3', cost: { iron_ingot: 3, wood: 2, rope: 1 }, tier: 7 },
+  { out: 'spear3', cost: { iron_ingot: 2, stick: 2, hide: 1 }, tier: 7 },
+  { out: 'lantern', cost: { iron_ingot: 2, fiber: 2, coconut: 1 }, tier: 7 },
+  { out: 'spear4', cost: { spear3: 1, obsidian: 2, rope: 1 }, tier: 7 },
   // Cucina: needs a campfire nearby (station)
   { out: 'fish_soup', cost: { fish_cooked: 1, potato: 1, coconut: 1 }, tier: 1, station: 'campfire' },
   { out: 'omelette', cost: { egg: 2, herb: 1 }, tier: 1, station: 'campfire' },
@@ -565,6 +604,26 @@ export function collectorGeo() {
   return merge(parts);
 }
 
+// Stone furnace: rough stone dome with a fire mouth and a chimney
+export function furnaceGeo() {
+  const parts = [];
+  const dome = new THREE.SphereGeometry(0.75, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62); dome.scale(1, 1.15, 1);
+  const p = dome.attributes.position;
+  for (let i = 0; i < p.count; i++) { const k = 1 + 0.07 * noise3(p.getX(i) * 6, p.getY(i) * 6, p.getZ(i) * 6); p.setXYZ(i, p.getX(i) * k, p.getY(i), p.getZ(i) * k); }
+  dome.computeVertexNormals(); noisy(dome, 0x8a8278, 0.3, 7); parts.push(dome);
+  const base = new THREE.CylinderGeometry(0.85, 0.9, 0.18, 14); base.translate(0, 0.09, 0); noisy(base, 0x6e6860, 0.3, 8); parts.push(base);
+  const mouth = new THREE.CircleGeometry(0.28, 12, 0, Math.PI); mouth.translate(0, 0.18, 0.74); col(mouth, 0x1a0e08); parts.push(mouth);
+  const chim = new THREE.CylinderGeometry(0.14, 0.18, 0.7, 8); chim.translate(0.15, 1.05, -0.15); noisy(chim, 0x7a7268, 0.3, 9); parts.push(chim);
+  return merge(parts);
+}
+// Drying rack: two A-frames with a pole and hanging strips
+export function rackGeo() {
+  const parts = [];
+  for (const x of [-0.7, 0.7]) for (const s of [-1, 1]) { const l = new THREE.CylinderGeometry(0.03, 0.035, 1.5, 5); l.rotateX(s * 0.32); l.translate(x, 0.7, 0); noisy(l, 0x7a5a36, 0.25, 9); parts.push(l); }
+  const bar = new THREE.CylinderGeometry(0.025, 0.025, 1.6, 6); bar.rotateZ(Math.PI / 2); bar.translate(0, 1.38, 0); noisy(bar, 0x8a6a42, 0.2, 9); parts.push(bar);
+  return merge(parts);
+}
+
 function tinted(geo, mul) {
   const g = geo.clone(), c = g.attributes.color;
   for (let i = 0; i < c.count; i++) c.setXYZ(i, c.getX(i) * mul[0], c.getY(i) * mul[1], c.getZ(i) * mul[2]);
@@ -589,6 +648,14 @@ const builders = {
   fish_soup: () => bowlGeo(0xd8a060), omelette: () => bowlGeo(0xf0d060), herbal_tea: () => bowlGeo(0x6a8a3a), tropical_salad: () => bowlGeo(0x9ac04a),
   bandage: () => { const g = new THREE.CylinderGeometry(0.06, 0.06, 0.1, 10); g.rotateZ(Math.PI / 2); noisy(g, 0x9ab06a, 0.3, 14); return g; },
   coop: () => { const g = coopGeo(); g.scale(0.3, 0.3, 0.3); return g; }, water_collector: () => { const g = collectorGeo(); g.scale(0.35, 0.35, 0.35); return g; },
+  iron_ore: () => lumpGeo(0x8a5a44, 1.1, 0.9, 1, 0.09, 7), obsidian: () => { const g = lumpGeo(0x16141a, 1.2, 0.8, 0.9, 0.08, 9); return g; },
+  iron_ingot: () => { const g = new THREE.BoxGeometry(0.24, 0.07, 0.11); g.translate(0, 0.035, 0); noisy(g, 0x9aa0a6, 0.15, 12); return g; },
+  furnace: () => { const g = furnaceGeo(); g.scale(0.3, 0.3, 0.3); return g; }, drying_rack: () => { const g = rackGeo(); g.scale(0.3, 0.3, 0.3); return g; },
+  pickaxe2: () => tinted(pickaxeGeo(), [0.85, 0.95, 1.15]), pickaxe3: () => tinted(pickaxeGeo(), [1.25, 1.25, 1.3]),
+  axe3: () => tinted(axeGeo(), [1.25, 1.25, 1.3]), spear3: () => tinted(spearGeo(), [1.2, 1.2, 1.25]), spear4: () => tinted(spearGeo(), [0.45, 0.42, 0.5]),
+  lantern: () => { const c = new THREE.CylinderGeometry(0.06, 0.07, 0.16, 8); col(c, 0xffd890); const top = new THREE.ConeGeometry(0.08, 0.06, 8); top.translate(0, 0.11, 0); col(top, 0x5a5a5e); const h = new THREE.TorusGeometry(0.05, 0.008, 4, 10, Math.PI); h.translate(0, 0.15, 0); col(h, 0x5a5a5e); const st = new THREE.CylinderGeometry(0.012, 0.012, 0.5, 5); st.translate(0, -0.3, 0); noisy(st, 0x7a5a3a, 0.2, 9); return merge([c, top, h, st]); },
+  jerky: () => { const g = new THREE.BoxGeometry(0.22, 0.03, 0.08); noisy(g, 0x6a2e1e, 0.3, 14); return g; },
+  dried_fish: () => fishGeo(0x9a7a4a, 0.3),
 };
 
 const geoCache = {};

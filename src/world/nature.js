@@ -12,7 +12,7 @@ import { ASSETS } from './assets.js';
 // Scanned rock (Poly Haven boulder_01) seen from different sides gives several silhouettes from one asset.
 // mode 'boulder': x/z extent ±1, y from -0.3 to 1.1 (sits sunk into the ground); 'block': centred box ±1.
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
-function scanRockVariants(mode) {
+export function scanRockVariants(mode) {
   const rots = [[0, 0, 0], [Math.PI / 2, 0, 0.3], [Math.PI, 0.7, 0], [0.2, 0, Math.PI / 2], [-Math.PI / 2, 1.2, 0]];
   return rots.map((r) => ['boulder', 'boulder_lod'].map((n) => {
     const src = ASSETS.models[n][0];
@@ -194,7 +194,7 @@ export class Nature {
     for (let i = 0; i < tries; i++) {
       const x = (r() * 2 - 1) * 460, z = (r() * 2 - 1) * 460;
       const s = T.coastDist(x, z);
-      if (s < -2) continue;
+      if (s < -2 || T.inCaveArea(x, z)) continue;
       const h = T.heightAt(x, z);
       if (h < 0.3) continue;
       const slope = T.slopeAt(x, z);
@@ -274,7 +274,7 @@ export class Nature {
     const cliffSpots = [];
     for (let x = -470; x < 470; x += 2.5) for (let z = -470; z < 470; z += 2.5) { // scan the grid for cliff faces
       const jx = x + (R() - 0.5) * 2.5, jz = z + (R() - 0.5) * 2.5;
-      if (T.heightAt(jx, jz) < 1.5) continue;
+      if (T.heightAt(jx, jz) < 1.5 || T.inCaveArea(jx, jz, 3)) continue;
       const sl = T.slopeAt(jx, jz);
       if (sl < 0.36) continue;
       cliffSpots.push({ x: jx, z: jz, sl });
@@ -583,7 +583,7 @@ export class Nature {
     for (let x = -450; x < 450; x += step) {
       for (let z = -450; z < 450; z += step) {
         const px = x + (R() - 0.5) * step, pz = z + (R() - 0.5) * step;
-        if (T.coastDist(px, pz) < 4) continue;
+        if (T.coastDist(px, pz) < 4 || T.inCaveArea(px, pz)) continue;
         const h = T.heightAt(px, pz);
         if (h < 2.0) continue;
         // meadows: thick in clearings, patchy elsewhere, thin under the jungle canopy

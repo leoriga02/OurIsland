@@ -23,8 +23,8 @@ export class Player {
     this.frozen = false;
   }
 
-  teleport(x, z, facing = this.facing) {
-    const g = this.world.groundHeight(x, z, 999);
+  teleport(x, z, facing = this.facing, fromY = 999) {
+    const g = this.world.groundHeight(x, z, fromY);
     this.pos.set(x, Math.max(g, this.world.waterLevel(x, z) - 1.0), z);
     this.vel.set(0, 0, 0);
     this.facing = facing;
